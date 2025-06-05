@@ -1,3 +1,5 @@
+# type: ignore
+
 from elasticsearch import Elasticsearch, exceptions
 from dotenv import load_dotenv
 import os

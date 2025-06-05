@@ -1,14 +1,8 @@
-# from fastapi import APIRouter
-
-# router = APIRouter()
-
-# @router.get("/health")
-# def health_check():
-#     return {"status": "OK"}
+# type: ignore
 
 from fastapi import APIRouter, HTTPException, Query
 from app.core.es import get_es_client
-from elasticsearch import exceptions
+from elasticsearch import exceptions 
 
 router = APIRouter()
 es = get_es_client()
@@ -73,4 +67,13 @@ def index_document(index: str = Query(...), id: int = Query(...), name: str = Qu
         res = es.index(index=index, id=id, document=doc)
         return res
     except exceptions.ElasticsearchException as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/hot_threads")
+async def get_hot_threads():
+    try:
+        response = es.transport.perform_request("GET", "/_nodes/hot_threads")
+        return response
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
