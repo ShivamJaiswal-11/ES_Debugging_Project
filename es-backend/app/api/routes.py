@@ -2,6 +2,8 @@
 
 from fastapi import APIRouter, HTTPException, Query
 from app.core.es import get_es_client
+import subprocess
+
 # from elasticsearch import exceptions 
 import elasticsearch
 # from elasticsearch import Elasticsearch
@@ -132,10 +134,35 @@ def index_document(index: str = Query(...), id: int = Query(...), name: str = Qu
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# @router.get("/hot_threads")
-# async def get_hot_threads():
-#     try:
-#         response = es.transport.perform_request("GET", "/_nodes/hot_threads")
-#         return response
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=str(e))
+@router.get("/jstack")
+def run_jstack(pid: int = Query(..., description="PID of the Java process")):
+    try:
+        result = subprocess.run(
+            ["jstack", "-l", str(pid)],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+
+        if result.returncode != 0:
+            raise HTTPException(status_code=500, detail=f"jstack error: {result.stderr.strip()}")
+
+        return {"pid": pid, "output": result.stdout}
+
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=500, detail="jstack command timed out.")
+
+    except FileNotFoundError:
+        raise HTTPException(status_code=500, detail="jstack not found. Ensure it's in your PATH.")
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/hot_threads")
+async def get_hot_threads():
+    try:
+        response = es.transport.perform_request("GET", "/_nodes/hot_threads")
+        return response
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
