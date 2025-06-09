@@ -1,8 +1,15 @@
 # type: ignore
-
-from fastapi import APIRouter, HTTPException, Query
+import time
+from fastapi.responses import JSONResponse
+from fastapi import APIRouter, HTTPException, Query, Request
 from app.core.es import get_es_client
 import subprocess
+import os
+import httpx
+from pydantic import BaseModel
+import asyncio
+from groq import Groq
+
 
 # from elasticsearch import exceptions 
 import elasticsearch
@@ -13,6 +20,15 @@ import elasticsearch
 router = APIRouter()
 es = get_es_client()
 # es = Elasticsearch("http://localhost:9200")  # Adjust host as needed
+
+USE_OLLAMA = False
+USE_GROQ = True
+# USE_OLLAMA = os.getenv("USE_OLLAMA", "true").lower() == "true"
+# USE_GROQ = os.getenv("USE_GROQ", "false").lower() == "true"
+# OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
+# OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+groq_client = Groq(api_key=GROQ_API_KEY)
 
 
 @router.get("/")
@@ -138,7 +154,7 @@ def index_document(index: str = Query(...), id: int = Query(...), name: str = Qu
 def run_jstack(pid: int = Query(..., description="PID of the Java process")):
     try:
         result = subprocess.run(
-            ["jstack", "-l", str(pid)],
+            ["jcmd", "-l", str(pid)],  #Using jcmd instead of jstack for better formatted results
             capture_output=True,
             text=True,
             timeout=10
@@ -166,3 +182,229 @@ async def get_hot_threads():
         return response
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+async def query_llm(prompt: str) -> str:
+    if USE_OLLAMA:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{OLLAMA_URL}/api/generate",
+                json={"model": "llama3", "prompt": prompt, "stream": False}
+            )
+            resp.raise_for_status()
+            return resp.json().get("response", "").strip()
+
+    elif USE_GROQ:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
+                json={
+                    "model": "deepseek-r1-distill-llama-70b",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.6,
+                    "max_tokens": 1024,
+                    "top_p": 0.95,
+                    "stream": False
+                },
+                timeout=30
+            )
+            resp.raise_for_status()
+            return resp.json()["choices"][0]["message"]["content"].strip()
+
+    else:
+        import openai
+        openai.api_key = OPENAI_API_KEY
+        chat_resp = await openai.ChatCompletion.acreate(
+            model="gpt-4",
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return chat_resp["choices"][0]["message"]["content"]
+
+
+@router.post("/analyze")
+async def analyze_issues(request: Request):
+    try:
+        body = await request.json()
+        jstack_output = body.get("jstack_output")
+        logs = body.get("logs", "")
+        heap_dump = body.get("heap_dump", "")
+
+        if not jstack_output:
+            raise HTTPException(status_code=400, detail="jstack_output is required")
+
+        prompt = f"""
+        You are a JVM diagnostics expert. Analyze the following JVM information:
+
+        === JSTACK OUTPUT ===\n{jstack_output}\n
+        === LOGS ===\n{logs}\n
+        === HEAP DUMP (summary) ===\n{heap_dump}\n
+        Identify performance issues, deadlocks, or memory issues and provide suggestions.
+        """
+
+        analysis = await query_llm(prompt)
+        return {"analysis": analysis}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
+class PIDRequest(BaseModel):
+    pid: int
+
+def run_jstack(pid: int, count: int = 3, interval: int = 1) -> str:
+    outputs = []
+    for _ in range(count):
+        try:
+            result = subprocess.run(["jstack", str(pid)], capture_output=True, text=True, check=True)  #Using jcmd instead of jstack for better formatted results
+            outputs.append(result.stdout)
+        except subprocess.CalledProcessError as e:
+            raise HTTPException(status_code=500, detail=f"jstack failed: {e.stderr}")
+        time.sleep(interval)
+    return "\n\n---\n\n".join(outputs)
+
+def analyze_with_groq(jstack_output: str) -> str:
+    # Truncate to first 5000 tokens (~20000 characters is a rough approximation)
+    truncated_output = jstack_output[:20000]
+
+    prompt = f"""You are a Java performance engineer. Analyze the following jstack output and return a clean, concise summary (max 10 lines) of only these issues if found:
+
+1. Deadlocks
+2. High CPU-consuming threads
+3. Threads stuck in I/O or GC pauses
+4. Thread pool contention or bottlenecks
+
+Avoid internal thoughts or reasoning (e.g., <think> or explanations). Only output a structured summary under the heading "Performance Analysis Summary", using bullet points or numbered list. Do not repeat the jstack content or describe detection logic.
+
+
+Keep your summary concise in form of 4 points  (each in 1 lines), for above 4 problems.
+Your output should look like this:
+**Performance Analysis Summary:**
+
+1. No deadlocks detected.
+2. Thread "C2 CompilerThread0" using high CPU: 78409ms.
+3. No threads appear stuck in I/O or GC.
+4. Multiple Elasticsearch threads in TIMED_WAITING, suggesting possible thread pool contention.
+
+{truncated_output}
+"""
+
+    try:
+        chat_completion = groq_client.chat.completions.create(
+            model="deepseek-r1-distill-llama-70b",
+            messages=[
+                {"role": "system", "content": "You are a Java performance engineer."},
+                {"role": "user", "content": prompt}
+            ]
+        )
+        return chat_completion.choices[0].message.content
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"GROQ API call failed: {str(e)}")
+
+@router.post("/auto-analyze")
+def analyze_jstack(request: PIDRequest):
+    jstack_output = run_jstack(request.pid)
+    analysis = analyze_with_groq(jstack_output)
+    return {"analysis": analysis}
+
+class QueryRequest(BaseModel):
+    index: str
+    query: dict = {"match_all": {}}
+
+
+@router.get("/queries/indices")
+def list_indices():
+    try:
+        indices = es.indices.get_alias("*")
+        return {"indices": list(indices.keys())}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list indices: {e}")
+
+
+@router.post("/queries/monitor")
+async def monitor_query(request: Request):
+    body = await request.json()
+    index = body.get("index")
+    query = body.get("query", {"match_all": {}})
+
+    try:
+        # Perform the profile query
+        response =  es.search(
+            index=index,
+            body={
+                "profile": True,
+                "query": query
+            }
+        )
+
+        took = response.get("took", 0)
+        timed_out = response.get("timed_out", False)
+        shard_info = response.get("_shards", {})
+        shard_profiles = response.get("profile", {}).get("shards", [])
+
+        analysis_results = []
+
+        for shard in shard_profiles:
+            shard_id = shard.get("id")
+            searches = shard.get("searches", [])
+            fetch = shard.get("fetch", {})
+
+            query_analysis = []
+
+            for search in searches:
+                qtype = search.get("type")
+                time_ns = search.get("time_in_nanos", 0)
+                breakdown = search.get("breakdown", {})
+
+                query_analysis.append({
+                    "query_type": qtype,
+                    "total_time_us": time_ns / 1000,
+                    "main_time_breakdown": {
+                        "build_scorer_us": breakdown.get("build_scorer", 0) / 1000,
+                        "score_us": breakdown.get("score", 0) / 1000,
+                        "next_doc_us": breakdown.get("next_doc", 0) / 1000,
+                        "create_weight_us": breakdown.get("create_weight", 0) / 1000,
+                    },
+                    "remarks": "✅ Query execution is healthy and optimal."
+                })
+
+            fetch_time = fetch.get("time_in_nanos", 0)
+            fetch_breakdown = fetch.get("breakdown", {})
+            fetch_children = fetch.get("children", [])
+
+            fetch_analysis = {
+                "fetch_time_us": fetch_time / 1000,
+                "main_time_breakdown": {
+                    "load_stored_fields_us": fetch_breakdown.get("load_stored_fields", 0) / 1000,
+                    "load_source_us": fetch_breakdown.get("load_source", 0) / 1000,
+                    "next_reader_us": fetch_breakdown.get("next_reader", 0) / 1000,
+                },
+                "children": []
+            }
+
+            for child in fetch_children:
+                fetch_analysis["children"].append({
+                    "phase": child.get("type"),
+                    "time_us": child.get("time_in_nanos", 0) / 1000,
+                    "remarks": "✅ Phase executed efficiently."
+                })
+
+            analysis_results.append({
+                "shard_id": shard_id,
+                "query_analysis": query_analysis,
+                "fetch_analysis": fetch_analysis,
+                "shard_status": "✅ No problems or inefficiencies were detected."
+            })
+
+        return JSONResponse(content={
+            "summary": {
+                "took_ms": took,
+                "timed_out": timed_out,
+                "shards": shard_info
+            },
+            "analysis": analysis_results
+        })
+
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
