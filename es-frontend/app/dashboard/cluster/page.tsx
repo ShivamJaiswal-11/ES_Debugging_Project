@@ -1,0 +1,171 @@
+"use client"
+
+import { useState, useEffect } from "react"
+import { RefreshCw, Server, Database, Activity, AlertTriangle } from "lucide-react"
+
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+
+interface ClusterHealth {
+  status: "green" | "yellow" | "red"
+  cluster_name: string
+  number_of_nodes: number
+  number_of_data_nodes: number
+  active_primary_shards: number
+  active_shards: number
+  unassigned_shards: number
+  uptime: string
+}
+
+export default function ClusterOverview() {
+  const [clusterHealth, setClusterHealth] = useState<ClusterHealth | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+
+  const fetchClusterHealth = async () => {
+    setLoading(true)
+    try {
+      // Simulate API call
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+
+      // Mock data
+      const mockData: ClusterHealth = {
+        status: "green",
+        cluster_name: "production-cluster",
+        number_of_nodes: 5,
+        number_of_data_nodes: 3,
+        active_primary_shards: 125,
+        active_shards: 250,
+        unassigned_shards: 0,
+        uptime: "15 days, 4 hours",
+      }
+
+      setClusterHealth(mockData)
+      setLastUpdated(new Date())
+    } catch (error) {
+      console.error("Failed to fetch cluster health:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchClusterHealth()
+  }, [])
+
+  const getHealthColor = (status: string) => {
+    switch (status) {
+      case "green":
+        return "bg-green-500"
+      case "yellow":
+        return "bg-yellow-500"
+      case "red":
+        return "bg-red-500"
+      default:
+        return "bg-gray-500"
+    }
+  }
+
+  const getHealthVariant = (status: string) => {
+    switch (status) {
+      case "green":
+        return "default"
+      case "yellow":
+        return "secondary"
+      case "red":
+        return "destructive"
+      default:
+        return "outline"
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Cluster Overview</h1>
+          <p className="text-muted-foreground">Monitor your Elasticsearch cluster health and statistics</p>
+        </div>
+        <Button onClick={fetchClusterHealth} disabled={loading}>
+          <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+          Refresh
+        </Button>
+      </div>
+
+      {lastUpdated && <p className="text-sm text-muted-foreground">Last updated: {lastUpdated.toLocaleString()}</p>}
+
+      {clusterHealth && (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Cluster Health</CardTitle>
+              <Activity className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center space-x-2">
+                <div className={`h-3 w-3 rounded-full ${getHealthColor(clusterHealth.status)}`} />
+                <Badge variant={getHealthVariant(clusterHealth.status)}>{clusterHealth.status.toUpperCase()}</Badge>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">{clusterHealth.cluster_name}</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Nodes</CardTitle>
+              <Server className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{clusterHealth.number_of_nodes}</div>
+              <p className="text-xs text-muted-foreground">{clusterHealth.number_of_data_nodes} data nodes</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Active Shards</CardTitle>
+              <Database className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{clusterHealth.active_shards}</div>
+              <p className="text-xs text-muted-foreground">{clusterHealth.active_primary_shards} primary</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Unassigned Shards</CardTitle>
+              <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{clusterHealth.unassigned_shards}</div>
+              <p className="text-xs text-muted-foreground">Requires attention if &gt; 0</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Cluster Information</CardTitle>
+          <CardDescription>Additional cluster details and uptime information</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {clusterHealth && (
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <h4 className="font-medium mb-2">Uptime</h4>
+                <p className="text-2xl font-bold text-green-600">{clusterHealth.uptime}</p>
+              </div>
+              <div>
+                <h4 className="font-medium mb-2">Cluster Name</h4>
+                <p className="text-lg">{clusterHealth.cluster_name}</p>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
