@@ -1,86 +1,100 @@
 "use client"
-
+import axios from "axios"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Server, ArrowRight, Moon, Sun } from "lucide-react"
 import { useTheme } from "next-themes"
-
+ 
+import { zodResolver } from "@hookform/resolvers/zod"
+import { useForm } from "react-hook-form"
+import { z } from "zod"
 import { Button } from "@/components/ui/button"
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Label } from "@/components/ui/label"
+// import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+// import { Label } from "@/components/ui/label"
 import { ComboBox } from "@/components/combo-box"
 import { Input } from "@/components/ui/input"
-const clusters = [
+import { toast } from "react-hot-toast"
+
+
+
+const formSchema = z.object({
+  url: z.string().min(1, {
+    message: "Please enter the URL.",
+  }),
+  username: z.string().min(1, {
+    message: "Please enter the Username.",
+  }),
+  password: z.string().min(1, {
+    message: "Please enter the Password.",
+  }),
+
+})
+
+const optionLists = [
   {
-    id: "prod-cluster-1",
-    name: "Production Cluster 1",
-    url: "https://prod-es-1.company.com:9200",
-    status: "healthy",
-    nodes: 5,
+    value: "local",
+    label: "Local Machine",
   },
   {
-    id: "prod-cluster-2",
-    name: "Production Cluster 2",
-    url: "https://prod-es-2.company.com:9200",
-    status: "warning",
-    nodes: 3,
+    value: "cloud",
+    label: "Cloud Provider",
   },
-  {
-    id: "staging-cluster",
-    name: "Staging Cluster",
-    url: "https://staging-es.company.com:9200",
-    status: "healthy",
-    nodes: 2,
-  },
-  {
-    id: "dev-cluster",
-    name: "Development Cluster",
-    url: "http://localhost:9200",
-    status: "healthy",
-    nodes: 1,
-  },
+ 
 ]
 
 export default function HomePage() {
-  const [localClusterUrl, setLocalClusterUrl] = useState("")
-  const [cloudClusterUrl, setCloudClusterUrl] = useState("")
-  const [enableButton, setEnableButton] = useState(false)
+
+  const [disableButton, setDisableButton] = useState(false)
   const router = useRouter()
   const [val, setVal] = useState("")
   const { theme, setTheme } = useTheme()
-  console.log("button:", enableButton)
 
-  const handleContinue = () => {
-    if (localClusterUrl && val === "local") {
-      
-      // Store selected cluster in localStorage or context
-      // localStorage.setItem("selectedCluster", selectedCluster)
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      username: "",
+      password:"",
+      url:""
+    },
+  })
+ 
+  function onSubmit(values: z.infer<typeof formSchema>) {
+    setDisableButton(true)
+    const payload = {
+    type: val,
+    url: values.url,
+    username: values.username,
+    password: values.password,
     }
-    else if (cloudClusterUrl && val === "cloud") {
-      // Store selected cluster in localStorage or context
-      // localStorage.setItem("selectedCluster", selectedCluster)
-    }
-    else {
-      alert("Please enter a valid URL for the selected cluster.")
-      return
-    }
-    return
-    // router.push("/dashboard/cluster")
+    console.log(payload);
+    console.log("Payload for local cluster:", payload)
+    axios.post("http://127.0.0.1:8000/init-client", payload)
+      .then((response) => {
+        console.log("Client initialized", response.data)
+        localStorage.setItem("ClusterInit", "true");
+        toast.success("Client initialized")
+        setTimeout(() => {
+          router.push("/dashboard/cluster")
+        }, 400);
+      })
+      .catch((error) => {
+        // console.error("Error initializing client:", error)
+        alert("Please enter a valid details for the selected cluster.")
+        setDisableButton(false)
+      })
+    console.log(values)
   }
 
-  // const getStatusColor = (status: string) => {
-  //   switch (status) {
-  //     case "healthy":
-  //       return "text-green-600 bg-green-100 dark:text-green-400 dark:bg-green-900/20"
-  //     case "warning":
-  //       return "text-yellow-600 bg-yellow-100 dark:text-yellow-400 dark:bg-yellow-900/20"
-  //     case "error":
-  //       return "text-red-600 bg-red-100 dark:text-red-400 dark:bg-red-900/20"
-  //     default:
-  //       return "text-gray-600 bg-gray-100 dark:text-gray-400 dark:bg-gray-900/20"
-  //   }
-  // }
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       {/* Theme toggle button */}
@@ -98,28 +112,112 @@ export default function HomePage() {
             <Server className="h-6 w-6" />
             Select Elasticsearch Cluster
           </CardTitle>
-          <CardDescription>Choose the cluster you want to monitor and diagnose</CardDescription>
+          <CardDescription>Choose the source of the cluster you want to monitor and diagnose</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6 w-full">
           <div className="w-full flex items-center justify-center mb-4 flex-row">
-            <ComboBox val={val} setVal={setVal} />
+            <ComboBox options={optionLists} val={val} setVal={setVal} innerText = "Source"/>
           </div>
           <div>
           {val=="local" ?
           <div className="text-center text-sm text-muted-foreground mb-4">
-            <p>Please enter the URL where your local cluster is running.</p>
+            <p>Please enter the URL where your local cluster is running along with your elastic Username and Password.</p>
             <div className="mt-4">
-              <Input type="url" placeholder="Cluster URL"  value={localClusterUrl}
-                onChange={(e) => {setLocalClusterUrl(e.target.value);if(e.target.value!=""){setEnableButton(true)}else{setEnableButton(false);} }} />
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+                   <FormField
+                    control={form.control}
+                    name="url"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-black dark:text-white ">URL</FormLabel>
+                        <FormControl>
+                          <Input placeholder="http://localhost:9200/" {...field} className="text-black dark:text-white"/>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="username"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-black dark:text-white">Username</FormLabel>
+                        <FormControl>
+                          <Input placeholder="elastic_user" {...field} className="text-black dark:text-white"/>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                    <FormField
+                    control={form.control}
+                    name="password"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-black dark:text-white">Password</FormLabel>
+                        <FormControl>
+                          <Input placeholder="********" {...field} type="password" className="text-black dark:text-white"/>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <Button type="submit" className={`w-3/4 h-12 hover:cursor-pointer`} disabled={disableButton}>Continue</Button>
+                </form>
+              </Form>
             </div>
           </div>
           :
           <div>{val=="cloud" ?
           <div className="text-center text-sm text-muted-foreground mb-4">
-            <p>Please enter the API of your cluster.</p>
+            <p>Please enter the API of your cluster along with Username and Password.</p>
             <div className="mt-4">
-              <Input type="url" placeholder="Cluster API"  value={cloudClusterUrl}
-                onChange={(e) => {setCloudClusterUrl(e.target.value);if(e.target.value!=""){setEnableButton(true)}else{setEnableButton(false);}}} />
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+                   <FormField
+                    control={form.control}
+                    name="url"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-black dark:text-white">URL</FormLabel>
+                        <FormControl>
+                          <Input placeholder="https://bddfer.elastic-cloud.com:4" {...field} className="text-black dark:text-white"/>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="username"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-black dark:text-white">Username</FormLabel>
+                        <FormControl>
+                          <Input placeholder="elastic_user" {...field} className="text-black dark:text-white"/>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                    <FormField
+                    control={form.control}
+                    name="password"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-black dark:text-white">Password</FormLabel>
+                        <FormControl>
+                          <Input placeholder="********" {...field} type="password" className="text-black dark:text-white"/>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <Button type="submit" className={`w-3/4 h-12 hover:cursor-pointer enabled:${disableButton}`} disabled={disableButton}>Continue</Button>
+                </form>
+              </Form>
             </div>
           </div>
           :
@@ -150,10 +248,10 @@ export default function HomePage() {
             ))}
           </RadioGroup> */}
 
-          <Button onClick={handleContinue} disabled={!enableButton} className="w-full" size="lg">
+          {/* <Button onClick={handleContinue} disabled={!disableButton} className="w-full" size="lg">
             Continue to Dashboard
             <ArrowRight className="ml-2 h-4 w-4" />
-          </Button>
+          </Button> */}
         </CardContent>
       </Card>
     </div>

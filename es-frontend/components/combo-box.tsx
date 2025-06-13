@@ -19,24 +19,18 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 
-const sources = [
-  {
-    value: "local",
-    label: "Local Machine",
-  },
-  {
-    value: "cloud",
-    label: "Cloud Provider",
-  },
- 
-]
-
+interface optionList {
+  value: string
+  label: string
+}
 type ComboboxProps = {
+  options:optionList[]
   val: string
   setVal: React.Dispatch<React.SetStateAction<string>>
+  innerText:string
 }
 
-export function ComboBox({ val, setVal }: ComboboxProps) {
+export function ComboBox({options, val, setVal ,innerText}: ComboboxProps) {
   const [open, setOpen] = React.useState(false)
 
   return (
@@ -46,21 +40,22 @@ export function ComboBox({ val, setVal }: ComboboxProps) {
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className="w-[200px] justify-between"
+          className="w-[200px] justify-between dark:text-gray-300 text-zinc-800"
         >
+          {/* {`Select ${innerText}`} */}
           {val
-            ? sources.find((framework) => framework.value === val)?.label
-            : "Select Source..."}
+            ? options.find((x) => x.value === val)?.label
+            : `Select ${innerText} `}
           <ChevronsUpDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[200px] p-0">
         <Command>
-          <CommandInput placeholder="Search Source..." />
+          <CommandInput placeholder={`Search ${innerText}...`} />
           <CommandList>
-            <CommandEmpty>No source found.</CommandEmpty>
+            <CommandEmpty>Empty.</CommandEmpty>
             <CommandGroup>
-              {sources.map((source) => (
+              {options.map((source) => (
                 <CommandItem
                   key={source.value}
                   value={source.value}

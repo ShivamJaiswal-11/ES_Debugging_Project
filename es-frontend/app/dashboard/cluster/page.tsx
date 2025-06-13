@@ -6,6 +6,8 @@ import { RefreshCw, Server, Database, Activity, AlertTriangle } from "lucide-rea
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { useRouter } from "next/navigation"
+import axios from "axios"
 
 interface ClusterHealth {
   status: "green" | "yellow" | "red"
@@ -19,6 +21,7 @@ interface ClusterHealth {
 }
 
 export default function ClusterOverview() {
+  const router = useRouter()
   const [clusterHealth, setClusterHealth] = useState<ClusterHealth | null>(null)
   const [loading, setLoading] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
@@ -26,22 +29,27 @@ export default function ClusterOverview() {
   const fetchClusterHealth = async () => {
     setLoading(true)
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      axios
+        .get("http://127.0.0.1:8000/cluster/health")
+        .then((response) => {
+          const data = response.data
 
-      // Mock data
-      const mockData: ClusterHealth = {
-        status: "green",
-        cluster_name: "production-cluster",
-        number_of_nodes: 5,
-        number_of_data_nodes: 3,
-        active_primary_shards: 125,
-        active_shards: 250,
-        unassigned_shards: 0,
-        uptime: "15 days, 4 hours",
-      }
+          const health: ClusterHealth = {
+            status: data.status,
+            cluster_name: data.cluster_name,
+            number_of_nodes: data.number_of_nodes,
+            number_of_data_nodes: data.number_of_data_nodes,
+            active_primary_shards: data.active_primary_shards,
+            active_shards: data.active_shards,
+            unassigned_shards: data.unassigned_shards,
+            uptime: "N/A", // placeholder, replace if real uptime data is available
+          }
 
-      setClusterHealth(mockData)
+          setClusterHealth(health)
+        })
+        .catch((error) => {
+          console.error("Error fetching cluster health:", error)
+        })
       setLastUpdated(new Date())
     } catch (error) {
       console.error("Failed to fetch cluster health:", error)
@@ -51,8 +59,12 @@ export default function ClusterOverview() {
   }
 
   useEffect(() => {
+    const clusterInit = localStorage.getItem("ClusterInit")
+    if (clusterInit !== "true") {
+      router.push("/")
+    }
     fetchClusterHealth()
-  }, [])
+  }, [router])
 
   const getHealthColor = (status: string) => {
     switch (status) {

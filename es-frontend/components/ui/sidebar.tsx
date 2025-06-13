@@ -207,14 +207,14 @@ const Sidebar = React.forwardRef<
           }
           side={side}
         >
-          <div className="flex h-full w-full flex-col">
+          <div className="flex h-full w-full flex-col bg-amber-500">
             {/* Close button for mobile */}
             <div className="flex justify-end p-4">
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={() => setOpenMobile(false)}
-                className="h-8 w-8 text-sidebar-foreground hover:bg-sidebar-accent"
+                className="h-8 w-8 text-sidebar-foreground hover:bg-sidebar-accentß"
               >
                 <X className="h-4 w-4" />
                 <span className="sr-only">Close sidebar</span>
@@ -270,7 +270,7 @@ const Sidebar = React.forwardRef<
                 variant="ghost"
                 size="icon"
                 onClick={() => setOpen(false)}
-                className="h-8 w-8 text-sidebar-foreground hover:bg-sidebar-accent"
+                className="h-8 w-8 text-sidebar-foreground hover:bg-sidebar-accent bg-gray-200 dark:bg-zinc-800"
               >
                 <X className="h-4 w-4" />
                 <span className="sr-only">Close sidebar</span>

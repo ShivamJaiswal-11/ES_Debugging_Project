@@ -8,6 +8,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
+import { useRouter } from "next/navigation"
+import axios from "axios"
+import { set } from "react-hook-form"
 
 interface IndexInfo {
   name: string
@@ -17,27 +20,54 @@ interface IndexInfo {
 }
 
 export default function IndicesExplorer() {
+  // localStorage.setItem("ClusterInit", "true");
   const [indices, setIndices] = useState<IndexInfo[]>([])
   const [filteredIndices, setFilteredIndices] = useState<IndexInfo[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [loading, setLoading] = useState(false)
+  const router = useRouter()
+
 
   const fetchIndices = async () => {
     setLoading(true)
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-
-      const mockIndices: IndexInfo[] = [
-        { name: "logs-2024.01", docCount: 1250000, size: "2.1 GB", health: "green" },
-        { name: "users", docCount: 45000, size: "125 MB", health: "green" },
-        { name: "products", docCount: 12000, size: "45 MB", health: "yellow" },
-        { name: "orders-2024", docCount: 890000, size: "1.8 GB", health: "green" },
-        { name: "analytics", docCount: 2100000, size: "3.2 GB", health: "green" },
-        { name: "sessions", docCount: 750000, size: "890 MB", health: "red" },
-      ]
-
-      setIndices(mockIndices)
-      setFilteredIndices(mockIndices)
+       axios
+        .get<string[]>("http://127.0.0.1:8000/indices")
+        .then(async (res) => {
+          const indexNames = res.data
+          // console.log(res.data)
+            const indexInfoResponses= await Promise.all(indexNames.map((index) =>
+              axios
+                .post("http://127.0.0.1:8000/index/info", {
+                  index: index,
+                })
+                .then((response) => {
+                  const info: IndexInfo = {
+                    name: response.data.index_name,
+                    docCount: response.data.doc_count,
+                    size: `${response.data.size_in_bytes} bytes`,
+                    health: response.data.health_status,
+                  }
+                  // console.log(info)
+                  return info
+                })
+                .catch((error) => {
+                  console.error(`Error fetching info for index ${index}:`, error)
+                  return null
+                })
+            )
+          )
+            // console.log(indexInfoResponses)
+          const validInfo = indexInfoResponses.filter(
+            (info): info is IndexInfo => info !== null
+          )
+          setIndices(validInfo)
+          localStorage.setItem("Indices_list", JSON.stringify(validInfo));
+        })
+        .catch((err) => console.error("Error fetching indices list:", err))
+  
+      // setIndices(mockIndices)
+      // setFilteredIndices(mockIndices)
     } catch (error) {
       console.error("Failed to fetch indices:", error)
     } finally {
@@ -46,8 +76,21 @@ export default function IndicesExplorer() {
   }
 
   useEffect(() => {
-    fetchIndices()
-  }, [])
+    const clusterInit = localStorage.getItem("ClusterInit")
+    if (clusterInit !== "true") {
+      router.push("/")
+    }else{
+      const indices_lst = localStorage.getItem("Indices_list")
+      if (indices_lst) {
+        const parsedIndices = JSON.parse(indices_lst) as IndexInfo[]
+        if (parsedIndices.length > 0) {
+          setIndices(parsedIndices)
+        }
+      }
+
+      fetchIndices()
+    }
+  }, [router])
 
   useEffect(() => {
     const filtered = indices.filter((index) => index.name.toLowerCase().includes(searchTerm.toLowerCase()))

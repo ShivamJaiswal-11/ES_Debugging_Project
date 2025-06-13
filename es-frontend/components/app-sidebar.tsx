@@ -33,8 +33,8 @@ const navigationItems = [
     icon: BarChart3,
   },
   {
-    title: "JVM & Threads",
-    url: "/dashboard/diagnostics",
+    title: "JStack Diagnostics",
+    url: "/dashboard/jstack-diagnostics",
     icon: Activity,
   },
   {
@@ -56,9 +56,9 @@ export function AppSidebar() {
     <Sidebar>
       <SidebarHeader className="p-4">
         <div className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded bg-primary flex items-center justify-center">
+          {/* <div className="h-8 w-8 rounded bg-primary flex items-center justify-center">
             <Search className="h-4 w-4 text-primary-foreground" />
-          </div>
+          </div> */}
           <div>
             <h2 className="text-lg font-semibold">ES Monitor</h2>
             <p className="text-xs text-muted-foreground">Diagnostics Tool</p>

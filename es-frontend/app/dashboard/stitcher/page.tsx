@@ -1,60 +1,134 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Send, Copy, Share, Zap } from "lucide-react"
-
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Textarea } from "@/components/ui/textarea"
-import { useToast } from "@/hooks/use-toast"
+// import { Textarea } from "@/components/ui/textarea"
 
+import { Search, RefreshCw, Play } from "lucide-react"
+
+import { Badge } from "@/components/ui/badge"
+import { useToast } from "@/hooks/use-toast"
+import { useRouter } from "next/navigation"
+import axios from "axios"
+
+interface IndexInfo {
+  name: string
+  docCount: number
+  size: string
+  health: "green" | "yellow" | "red"
+}
+
+interface Sorted_index {
+  index: string
+  metric: number
+}
 export default function IssueStitcher() {
   const [issueDescription, setIssueDescription] = useState("")
+  const [indices, setIndices] = useState<IndexInfo[]>([])
   const [analysis, setAnalysis] = useState("")
   const [loading, setLoading] = useState(false)
   const { toast } = useToast()
+  const router = useRouter()
+  const [n_val,setN_val]=useState("")    
+  const [sortBy,setSortBy]=useState("")
 
-  const submitIssue = async () => {
+
+    const fetchIndices = async () => {
+      setLoading(true)
+      try {
+         axios
+          .get<string[]>("http://127.0.0.1:8000/indices")
+          .then(async (res) => {
+            const indexNames = res.data
+            // console.log(res.data)
+              const indexInfoResponses= await Promise.all(indexNames.map((index) =>
+                axios
+                  .post("http://127.0.0.1:8000/index/info", {
+                    index: index,
+                  })
+                  .then((response) => {
+                    const info: IndexInfo = {
+                      name: response.data.index_name,
+                      docCount: response.data.doc_count,
+                      size: `${response.data.size_in_bytes} bytes`,
+                      health: response.data.health_status,
+                    }
+                    // console.log(info)
+                    return info
+                  })
+                  .catch((error) => {
+                    console.error(`Error fetching info for index ${index}:`, error)
+                    return null
+                  })
+              )
+            )
+              // console.log(indexInfoResponses)
+            const validInfo = indexInfoResponses.filter(
+              (info): info is IndexInfo => info !== null
+            )
+            setIndices(validInfo)
+          })
+          .catch((err) => console.error("Error fetching indices list:", err))
+    
+        // setIndices(mockIndices)
+        // setFilteredIndices(mockIndices)
+      } catch (error) {
+        console.error("Failed to fetch indices:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+  
+  
+  useEffect(() => {
+    const clusterInit = localStorage.getItem("ClusterInit")
+    if (clusterInit !== "true") {
+      router.push("/")
+    }
+    else{
+      const stored_n_val = localStorage.getItem("N_val")
+      const stored_sortBy = localStorage.getItem("SortBy")
+      if (stored_n_val) {
+        setN_val(stored_n_val)
+      }
+      if (stored_sortBy) {
+        setSortBy(stored_sortBy)
+      }
+      const filtered_indices_lst = localStorage.getItem("filtered_indices_list")
+      if (filtered_indices_lst) {
+        const parsedIndices = JSON.parse(filtered_indices_lst) as IndexInfo[]
+        if (parsedIndices.length > 0) {
+          setIndices(parsedIndices)
+          // setFilteredIndices(parsedIndices)
+        }
+      } else {
+        fetchIndices()
+      }
+      // fetchIndices()
+    }
+  }, [router])
+  const getHealthVariant = (health: string) => {
+    switch (health) {
+      case "green":
+        return "default"
+      case "yellow":
+        return "secondary"
+      case "red":
+        return "destructive"
+      default:
+        return "outline"
+    }
+  }
+  const  onClickFireJstack= async () => {
     if (!issueDescription.trim()) return
 
     setLoading(true)
     try {
       await new Promise((resolve) => setTimeout(resolve, 2000))
-
-      const mockAnalysis = `# Elasticsearch Issue Analysis
-
-## Problem Summary
-Based on your description, you're experiencing performance degradation in your Elasticsearch cluster. Here's my analysis:
-
-## Root Cause Analysis
-1. **High Query Latency**: The symptoms suggest index fragmentation or suboptimal query patterns
-2. **Memory Pressure**: JVM heap usage patterns indicate potential memory leaks
-3. **Shard Imbalance**: Uneven shard distribution across nodes
-
-## Recommended Solutions
-
-### Immediate Actions
-- **Optimize Queries**: Review and optimize frequently used queries
-- **Index Maintenance**: Run \`_forcemerge\` on indices with high segment count
-- **Memory Tuning**: Adjust JVM heap settings based on node capacity
-
-### Long-term Improvements
-- **Index Lifecycle Management**: Implement ILM policies for automatic index management
-- **Monitoring Setup**: Deploy comprehensive monitoring with alerts
-- **Capacity Planning**: Review cluster sizing and scaling strategies
-
-## Implementation Steps
-1. Start with query optimization (lowest risk, high impact)
-2. Schedule index maintenance during low-traffic periods
-3. Monitor improvements and adjust accordingly
-
-## Additional Resources
-- [Elasticsearch Performance Tuning Guide](https://elastic.co/guide)
-- [JVM Memory Management Best Practices](https://elastic.co/guide/jvm)
-- [Index Lifecycle Management Documentation](https://elastic.co/guide/ilm)
-
-*This analysis was generated by AI and should be reviewed by your team before implementation.*`
-
+      const mockAnalysis = `# Elasticsearch Issue Analysis`
       setAnalysis(mockAnalysis)
     } catch (error) {
       console.error("Failed to analyze issue:", error)
@@ -86,13 +160,16 @@ Based on your description, you're experiencing performance degradation in your E
       copyToClipboard()
     }
   }
-
+  // const handleDiagnose = (indexName: string) => {
+  //   // Navigate to query monitor with pre-filled index
+  //   window.location.href = `/dashboard/monitor?index=${indexName}`
+  // }
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">LLM-Powered Issue Stitcher</h1>
+        <h1 className="text-3xl font-bold tracking-tight">LLM-Powered Jstack Diagnostics</h1>
         <p className="text-muted-foreground">
-          Describe your Elasticsearch issue and get AI-powered analysis and recommendations
+          Fire Jstack to analyze your Elasticsearch cluster and get AI-generated recommendations.
         </p>
       </div>
 
@@ -100,21 +177,50 @@ Based on your description, you're experiencing performance degradation in your E
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Zap className="h-5 w-5" />
-            Describe Your Issue
+            Top N Indices
           </CardTitle>
-          <CardDescription>Provide as much detail as possible about the problem you're experiencing</CardDescription>
+          <CardDescription>Overview of top N indices in your cluster</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Textarea
+          {/* <Textarea
             placeholder="Describe your Elasticsearch issue here... Include symptoms, error messages, performance metrics, cluster configuration, and any recent changes."
             value={issueDescription}
             onChange={(e) => setIssueDescription(e.target.value)}
             rows={8}
             className="min-h-[200px]"
-          />
-          <Button onClick={submitIssue} disabled={loading || !issueDescription.trim()} className="w-full">
+          /> */}
+           <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Index Name</TableHead>
+                <TableHead>Document Count</TableHead>
+                <TableHead>Size</TableHead>
+                <TableHead>Health</TableHead>
+                {/* <TableHead>Fire Jstack</TableHead> */}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {indices.map((index) => (
+                <TableRow key={index.name}>
+                  <TableCell className="font-medium">{index.name}</TableCell>
+                  <TableCell>{index.docCount.toLocaleString()}</TableCell>
+                  <TableCell>{index.size}</TableCell>
+                  <TableCell>
+                    <Badge variant={getHealthVariant(index.health)}>{index.health}</Badge>
+                  </TableCell>
+                  {/* <TableCell>
+                    <Button size="sm" variant="outline" onClick={() => handleDiagnose(index.name)}>
+                      <Play className="mr-2 h-3 w-3" />
+                      Diagnose
+                    </Button>
+                  </TableCell> */}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          <Button onClick={onClickFireJstack} disabled={loading} className="w-full">
             <Send className={`mr-2 h-4 w-4 ${loading ? "animate-pulse" : ""}`} />
-            {loading ? "Analyzing Issue..." : "Analyze Issue"}
+            {loading ? "Firing Jstack..." : "Fire Jstack"}
           </Button>
         </CardContent>
       </Card>
