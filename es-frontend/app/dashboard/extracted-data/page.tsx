@@ -1,8 +1,10 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, LineChart, RefreshCw, Search, ZoomIn, RotateCcw, Plus } from "lucide-react"
+import { ArrowLeft, LineChart, RefreshCw, Search, ZoomIn, RotateCcw, Plus, RotateCw } from "lucide-react"
 import {
   Line,
   LineChart as RechartsLineChart,
@@ -10,13 +12,14 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
+  Legend,
   ReferenceArea,
 } from "recharts"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
-import { ChartContainer, ChartTooltip } from "@/components/ui/chart"
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -44,7 +47,6 @@ const availableMetrics = [
     lightColor: "rgb(220, 38, 127)", // Dark pink for light theme
     darkColor: "rgb(251, 146, 60)", // Light orange for dark theme
     scale: "primary",
-    unit: "docs",
   },
   {
     id: "index_total",
@@ -52,7 +54,6 @@ const availableMetrics = [
     lightColor: "rgb(37, 99, 235)", // Dark blue for light theme
     darkColor: "rgb(96, 165, 250)", // Light blue for dark theme
     scale: "secondary",
-    unit: "ops/sec",
   },
   {
     id: "search_total",
@@ -60,7 +61,6 @@ const availableMetrics = [
     lightColor: "rgb(22, 163, 74)", // Dark green for light theme
     darkColor: "rgb(74, 222, 128)", // Light green for dark theme
     scale: "secondary",
-    unit: "ops/sec",
   },
   {
     id: "refresh_total",
@@ -68,7 +68,6 @@ const availableMetrics = [
     lightColor: "rgb(202, 138, 4)", // Dark yellow for light theme
     darkColor: "rgb(250, 204, 21)", // Light yellow for dark theme
     scale: "secondary",
-    unit: "ops/sec",
   },
   {
     id: "store_size",
@@ -76,7 +75,6 @@ const availableMetrics = [
     lightColor: "rgb(147, 51, 234)", // Dark purple for light theme
     darkColor: "rgb(196, 181, 253)", // Light purple for dark theme
     scale: "primary",
-    unit: "MB",
   },
 ]
 
@@ -212,8 +210,6 @@ const generateMockData = (indexName: string, metrics: string[]) => {
 
 // Format metric values for display
 const formatMetricValue = (value: number, metric: string) => {
-  const metricInfo = availableMetrics.find((m) => m.id === metric)
-
   if (metric === "store_size") {
     return value > 1000 ? `${(value / 1000).toFixed(1)}GB` : `${value}MB`
   }
@@ -223,7 +219,7 @@ const formatMetricValue = (value: number, metric: string) => {
   if (value > 1000) {
     return `${(value / 1000).toFixed(1)}K`
   }
-  return `${value}${metricInfo?.unit ? ` ${metricInfo.unit}` : ""}`
+  return value.toString()
 }
 
 // Format timestamp for display - handle both number and string inputs
@@ -249,325 +245,24 @@ const formatTimestamp = (timestamp: number | string) => {
   })
 }
 
-interface MetricZoomState {
+interface ZoomState {
   left: number | null
   right: number | null
   refAreaLeft: number | null
   refAreaRight: number | null
-  isSelecting: boolean
+  isZooming: boolean
 }
 
 interface MetricData {
   id: string
   data: any[]
   originalData: any[]
-  zoomState: MetricZoomState
+  zoomState: ZoomState
 }
 
 interface SelectedIndex {
   name: string
   metrics: MetricData[]
-}
-
-// Individual Metric Chart Component
-interface MetricChartProps {
-  indexName: string
-  metricData: MetricData
-  onZoomStateChange: (metricId: string, newState: MetricZoomState) => void
-  onDataChange: (metricId: string, newData: any[]) => void
-  onRemoveMetric: (metricId: string) => void
-}
-
-function MetricChart({ indexName, metricData, onZoomStateChange, onDataChange, onRemoveMetric }: MetricChartProps) {
-  const metricInfo = availableMetrics.find((m) => m.id === metricData.id)
-  const metricColor = getMetricColor(metricData.id)
-
-  const handleMouseDown = useCallback(
-    (e: any) => {
-      if (e && e.activeLabel !== undefined && e.activeLabel !== null) {
-        const timestamp = Number(e.activeLabel)
-        onZoomStateChange(metricData.id, {
-          ...metricData.zoomState,
-          refAreaLeft: timestamp,
-          refAreaRight: timestamp,
-          isSelecting: true,
-        })
-      }
-    },
-    [metricData.id, metricData.zoomState, onZoomStateChange],
-  )
-
-  const handleMouseMove = useCallback(
-    (e: any) => {
-      if (metricData.zoomState.isSelecting && e && e.activeLabel !== undefined && e.activeLabel !== null) {
-        const timestamp = Number(e.activeLabel)
-        onZoomStateChange(metricData.id, {
-          ...metricData.zoomState,
-          refAreaRight: timestamp,
-        })
-      }
-    },
-    [metricData.id, metricData.zoomState, onZoomStateChange],
-  )
-
-  const handleMouseUp = useCallback(() => {
-    if (metricData.zoomState.isSelecting) {
-      const { refAreaLeft, refAreaRight } = metricData.zoomState
-
-      if (refAreaLeft !== null && refAreaRight !== null && refAreaLeft !== refAreaRight) {
-        // Determine the correct order for left and right bounds
-        const left = Math.min(refAreaLeft, refAreaRight)
-        const right = Math.max(refAreaLeft, refAreaRight)
-
-        // Filter data to zoom range
-        const zoomedData = metricData.originalData.filter((item) => {
-          const itemTime = item.timestamp
-          return itemTime >= left && itemTime <= right
-        })
-
-        if (zoomedData.length > 1) {
-          // Only zoom if we have more than 1 data point
-          onDataChange(metricData.id, zoomedData)
-          onZoomStateChange(metricData.id, {
-            left,
-            right,
-            refAreaLeft: null,
-            refAreaRight: null,
-            isSelecting: false,
-          })
-        } else {
-          // Reset selection if insufficient data
-          onZoomStateChange(metricData.id, {
-            ...metricData.zoomState,
-            refAreaLeft: null,
-            refAreaRight: null,
-            isSelecting: false,
-          })
-        }
-      } else {
-        // Reset selection if no valid range
-        onZoomStateChange(metricData.id, {
-          ...metricData.zoomState,
-          refAreaLeft: null,
-          refAreaRight: null,
-          isSelecting: false,
-        })
-      }
-    }
-  }, [metricData, onDataChange, onZoomStateChange])
-
-  const resetZoom = useCallback(() => {
-    onDataChange(metricData.id, metricData.originalData)
-    onZoomStateChange(metricData.id, {
-      left: null,
-      right: null,
-      refAreaLeft: null,
-      refAreaRight: null,
-      isSelecting: false,
-    })
-  }, [metricData.id, metricData.originalData, onDataChange, onZoomStateChange])
-
-  const isZoomed = metricData.zoomState.left !== null || metricData.zoomState.right !== null
-
-  return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-4 h-4 rounded-full" style={{ backgroundColor: metricColor }} />
-            <div>
-              <CardTitle className="text-lg">{metricInfo?.label || metricData.id}</CardTitle>
-              <CardDescription className="flex items-center gap-2">
-                <span>Index: {indexName}</span>
-                <Badge variant="outline" className="text-xs">
-                  {metricInfo?.unit || "value"}
-                </Badge>
-                {isZoomed && (
-                  <Badge variant="secondary" className="text-xs">
-                    Zoomed
-                  </Badge>
-                )}
-              </CardDescription>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {isZoomed && (
-              <Button variant="ghost" size="sm" onClick={resetZoom}>
-                <RotateCcw className="h-4 w-4 mr-1" />
-                Reset Zoom
-              </Button>
-            )}
-            <Button variant="ghost" size="sm" onClick={() => onRemoveMetric(metricData.id)}>
-              Remove
-            </Button>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="mb-3 flex items-center gap-2 text-sm text-muted-foreground">
-          <ZoomIn className="h-4 w-4" />
-          Click and drag on the chart to select an area to zoom into
-        </div>
-
-        <div className="relative">
-          {/* Transparent overlay to prevent text selection */}
-          <div
-            className="absolute inset-0 z-10 pointer-events-none"
-            style={{
-              background: "transparent",
-              userSelect: "none",
-              WebkitUserSelect: "none",
-              MozUserSelect: "none",
-              msUserSelect: "none",
-            }}
-          />
-
-          <ChartContainer
-            config={{
-              [metricData.id]: {
-                label: metricInfo?.label || metricData.id,
-                color: metricColor,
-              },
-            }}
-            className="h-[400px] w-full relative"
-            style={{
-              userSelect: "none",
-              WebkitUserSelect: "none",
-              MozUserSelect: "none",
-              msUserSelect: "none",
-            }}
-          >
-            <ResponsiveContainer width="100%" height="100%">
-              <RechartsLineChart
-                data={metricData.data}
-                margin={{ top: 20, right: 20, left: 60, bottom: 80 }}
-                onMouseDown={handleMouseDown}
-                onMouseMove={handleMouseMove}
-                onMouseUp={handleMouseUp}
-                style={{
-                  userSelect: "none",
-                  WebkitUserSelect: "none",
-                  MozUserSelect: "none",
-                  msUserSelect: "none",
-                }}
-              >
-                <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-                <XAxis
-                  dataKey="timestamp"
-                  type="number"
-                  scale="time"
-                  domain={["dataMin", "dataMax"]}
-                  tickFormatter={formatTimestamp}
-                  tick={{
-                    fontSize: 12,
-                    // userSelect: "none",
-                    pointerEvents: "none",
-                    style: {
-                      userSelect: "none",
-                      WebkitUserSelect: "none",
-                      MozUserSelect: "none",
-                      msUserSelect: "none",
-                      pointerEvents: "none",
-                    },
-                  }}
-                  angle={-45}
-                  textAnchor="end"
-                  height={60}
-                />
-                <YAxis
-                  tickFormatter={(value) => formatMetricValue(value, metricData.id)}
-                  tick={{
-                    fontSize: 12,
-                    // userSelect: "none",
-                    pointerEvents: "none",
-                    style: {
-                      userSelect: "none",
-                      WebkitUserSelect: "none",
-                      MozUserSelect: "none",
-                      msUserSelect: "none",
-                      pointerEvents: "none",
-                    },
-                  }}
-                  width={60}
-                />
-                <ChartTooltip
-                  content={({ active, payload, label }) => {
-                    if (!active || !payload?.length) return null
-
-                    return (
-                      <div className="rounded-lg border bg-background p-2 shadow-md">
-                        <div className="grid gap-0.5">
-                          <div className="text-xs text-muted-foreground">{formatTimestamp(label as number)}</div>
-                          {payload.map((item, index) => (
-                            <div key={index} className="flex items-center justify-between gap-2 text-sm">
-                              <div className="flex items-center gap-1">
-                                <div className="h-2 w-2 rounded-full" style={{ background: item.color }} />
-                                <span>{metricInfo?.label || metricData.id}</span>
-                              </div>
-                              <span className="font-medium tabular-nums">
-                                {formatMetricValue(item.value as number, metricData.id)}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )
-                  }}
-                />
-
-                <Line
-                  type="linear"
-                  dataKey={metricData.id}
-                  stroke={metricColor}
-                  strokeWidth={2}
-                  dot={false}
-                  activeDot={{ r: 4, strokeWidth: 2, fill: metricColor }}
-                  connectNulls={true}
-                  isAnimationActive={false}
-                />
-
-                {/* Reference area for zoom selection with theme-aware color */}
-                {metricData.zoomState.refAreaLeft !== null &&
-                  metricData.zoomState.refAreaRight !== null &&
-                  metricData.zoomState.refAreaLeft !== metricData.zoomState.refAreaRight && (
-                    <ReferenceArea
-                      x1={metricData.zoomState.refAreaLeft}
-                      x2={metricData.zoomState.refAreaRight}
-                      strokeOpacity={0.5}
-                      fillOpacity={0.1}
-                      fill={getSelectionColor()}
-                      stroke={getSelectionColor()}
-                    />
-                  )}
-              </RechartsLineChart>
-            </ResponsiveContainer>
-          </ChartContainer>
-
-          {/* Additional overlay specifically for axis areas */}
-          <div
-            className="absolute bottom-0 left-0 right-0 h-20 pointer-events-none z-20"
-            style={{
-              background: "transparent",
-              userSelect: "none",
-              WebkitUserSelect: "none",
-              MozUserSelect: "none",
-              msUserSelect: "none",
-            }}
-          />
-          <div
-            className="absolute top-0 bottom-0 left-0 w-16 pointer-events-none z-20"
-            style={{
-              background: "transparent",
-              userSelect: "none",
-              WebkitUserSelect: "none",
-              MozUserSelect: "none",
-              msUserSelect: "none",
-            }}
-          />
-        </div>
-      </CardContent>
-    </Card>
-  )
 }
 
 export default function IndexMetricExplorer() {
@@ -577,11 +272,11 @@ export default function IndexMetricExplorer() {
   const [currentMetrics, setCurrentMetrics] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [addingMetrics, setAddingMetrics] = useState(false)
+  const [showAddMetrics, setShowAddMetrics] = useState(false)
 
   const handleIndexSelect = (indexName: string) => {
     if (indexName) {
       setIndexInput(indexName)
-      setCurrentMetrics([])
     }
   }
 
@@ -589,7 +284,7 @@ export default function IndexMetricExplorer() {
     setCurrentMetrics((prev) => (prev.includes(metricId) ? prev.filter((id) => id !== metricId) : [...prev, metricId]))
   }
 
-  const createIndexWithMetrics = async () => {
+  const addIndexWithMetrics = async () => {
     if (!indexInput.trim() || currentMetrics.length === 0) return
 
     setLoading(true)
@@ -610,7 +305,7 @@ export default function IndexMetricExplorer() {
           right: null,
           refAreaLeft: null,
           refAreaRight: null,
-          isSelecting: false,
+          isZooming: false,
         },
       }))
 
@@ -622,6 +317,7 @@ export default function IndexMetricExplorer() {
       setSelectedIndex(newIndex)
       setIndexInput("")
       setCurrentMetrics([])
+      setAddingMetrics(false)
     } catch (error) {
       console.error("Failed to fetch metrics:", error)
     } finally {
@@ -637,7 +333,7 @@ export default function IndexMetricExplorer() {
       // Simulate API call
       await new Promise((resolve) => setTimeout(resolve, 1000))
 
-      // Generate mock data for new metrics
+      // Generate mock data for new metrics only
       const originalData = generateMockData(selectedIndex.name, currentMetrics)
 
       // Create new metric data objects
@@ -650,77 +346,78 @@ export default function IndexMetricExplorer() {
           right: null,
           refAreaLeft: null,
           refAreaRight: null,
-          isSelecting: false,
+          isZooming: false,
         },
       }))
 
       // Add new metrics to existing index
-      setSelectedIndex({
-        ...selectedIndex,
-        metrics: [...selectedIndex.metrics, ...newMetricDataObjects],
+      setSelectedIndex((prev) => {
+        if (!prev) return prev
+        return {
+          ...prev,
+          metrics: [...prev.metrics, ...newMetricDataObjects],
+        }
       })
 
       setCurrentMetrics([])
-      setAddingMetrics(false)
+      setShowAddMetrics(false)
     } catch (error) {
-      console.error("Failed to fetch metrics:", error)
+      console.error("Failed to add metrics:", error)
     } finally {
       setLoading(false)
     }
   }
 
-  const removeIndex = () => {
+  const changeIndex = () => {
     setSelectedIndex(null)
     setIndexInput("")
     setCurrentMetrics([])
     setAddingMetrics(false)
+    setShowAddMetrics(false)
+  }
+
+  const updateMetricZoomState = (metricId: string, zoomState: ZoomState) => {
+    setSelectedIndex((prev) => {
+      if (!prev) return prev
+
+      return {
+        ...prev,
+        metrics: prev.metrics.map((metric) => (metric.id === metricId ? { ...metric, zoomState } : metric)),
+      }
+    })
+  }
+
+  const updateMetricData = (metricId: string, data: any[]) => {
+    setSelectedIndex((prev) => {
+      if (!prev) return prev
+
+      return {
+        ...prev,
+        metrics: prev.metrics.map((metric) => (metric.id === metricId ? { ...metric, data } : metric)),
+      }
+    })
   }
 
   const removeMetric = (metricId: string) => {
-    if (!selectedIndex) return
+    setSelectedIndex((prev) => {
+      if (!prev) return prev
 
-    const updatedMetrics = selectedIndex.metrics.filter((m) => m.id !== metricId)
-
-    if (updatedMetrics.length === 0) {
-      // If no metrics left, remove the entire index
-      removeIndex()
-    } else {
-      setSelectedIndex({
-        ...selectedIndex,
-        metrics: updatedMetrics,
-      })
-    }
-  }
-
-  const updateMetricZoomState = (metricId: string, newState: MetricZoomState) => {
-    if (!selectedIndex) return
-
-    setSelectedIndex({
-      ...selectedIndex,
-      metrics: selectedIndex.metrics.map((metric) =>
-        metric.id === metricId ? { ...metric, zoomState: newState } : metric,
-      ),
+      return {
+        ...prev,
+        metrics: prev.metrics.filter((metric) => metric.id !== metricId),
+      }
     })
-  }
-
-  const updateMetricData = (metricId: string, newData: any[]) => {
-    if (!selectedIndex) return
-
-    setSelectedIndex({
-      ...selectedIndex,
-      metrics: selectedIndex.metrics.map((metric) => (metric.id === metricId ? { ...metric, data: newData } : metric)),
-    })
-  }
-
-  const getAvailableMetrics = () => {
-    if (!selectedIndex) return availableMetrics
-
-    const usedMetricIds = selectedIndex.metrics.map((m) => m.id)
-    return availableMetrics.filter((metric) => !usedMetricIds.includes(metric.id))
   }
 
   const getMetricLabel = (metricId: string) => {
     return availableMetrics.find((m) => m.id === metricId)?.label || metricId
+  }
+
+  // Get metrics that are not currently active
+  const getAvailableMetrics = () => {
+    if (!selectedIndex) return availableMetrics
+    const activeMetricIds = selectedIndex.metrics.map((m) => m.id)
+    return availableMetrics.filter((metric) => !activeMetricIds.includes(metric.id))
   }
 
   return (
@@ -733,14 +430,25 @@ export default function IndexMetricExplorer() {
           </Button>
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Index Metric Explorer</h1>
-            <p className="text-muted-foreground">
-              Select one index and visualize each metric in separate cards with individual zoom controls
-            </p>
+            <p className="text-muted-foreground">Visualize historical trends with click-and-drag zoom functionality</p>
           </div>
         </div>
+        {selectedIndex && (
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setShowAddMetrics(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Metrics
+            </Button>
+            <Button variant="outline" onClick={changeIndex}>
+              <RotateCw className="h-4 w-4 mr-2" />
+              Change Index
+            </Button>
+          </div>
+        )}
       </div>
 
-      {!selectedIndex ? (
+      {/* Initial Index & Metrics Selection */}
+      {!selectedIndex && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -800,79 +508,104 @@ export default function IndexMetricExplorer() {
                   </div>
 
                   <Button
-                    onClick={createIndexWithMetrics}
+                    onClick={addIndexWithMetrics}
                     disabled={currentMetrics.length === 0 || loading}
                     className="w-full sm:w-auto"
                   >
                     {loading && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
-                    {loading ? "Loading..." : "Create Visualization"}
+                    {loading ? "Loading..." : "Start Visualization"}
                   </Button>
                 </div>
               )}
             </div>
           </CardContent>
         </Card>
-      ) : (
+      )}
+
+      {/* Add More Metrics Modal */}
+      {showAddMetrics && selectedIndex && (
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <LineChart className="h-5 w-5" />
-                  {selectedIndex.name}
-                </CardTitle>
-                <CardDescription>
-                  {selectedIndex.metrics.length} metric{selectedIndex.metrics.length !== 1 ? "s" : ""} selected
-                </CardDescription>
-              </div>
-              <div className="flex items-center gap-2">
-                {getAvailableMetrics().length > 0 && (
-                  <Button variant="outline" onClick={() => setAddingMetrics(!addingMetrics)}>
-                    <Plus className="h-4 w-4 mr-1" />
-                    Add Metrics
-                  </Button>
-                )}
-                <Button variant="outline" onClick={removeIndex}>
-                  Change Index
-                </Button>
-              </div>
-            </div>
+            <CardTitle className="flex items-center gap-2">
+              <Plus className="h-5 w-5" />
+              Add More Metrics to "{selectedIndex.name}"
+            </CardTitle>
+            <CardDescription>Select additional metrics to add to your current visualization</CardDescription>
           </CardHeader>
-          {addingMetrics && getAvailableMetrics().length > 0 && (
-            <CardContent className="border-t">
+          <CardContent>
+            <div className="space-y-4">
               <div className="space-y-3">
-                <Label>Add More Metrics to "{selectedIndex.name}"</Label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-                  {getAvailableMetrics().map((metric) => (
-                    <div key={metric.id} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={`add-metric-${metric.id}`}
-                        checked={currentMetrics.includes(metric.id)}
-                        onCheckedChange={() => handleMetricToggle(metric.id)}
-                      />
-                      <label
-                        htmlFor={`add-metric-${metric.id}`}
-                        className="text-sm font-medium leading-none cursor-pointer"
-                      >
-                        {metric.label}
-                      </label>
-                    </div>
-                  ))}
-                </div>
+                <Label>Available Metrics</Label>
+                {getAvailableMetrics().length === 0 ? (
+                  <Alert>
+                    <AlertDescription>
+                      All available metrics are already being visualized for this index.
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                    {getAvailableMetrics().map((metric) => (
+                      <div key={metric.id} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`add-metric-${metric.id}`}
+                          checked={currentMetrics.includes(metric.id)}
+                          onCheckedChange={() => handleMetricToggle(metric.id)}
+                        />
+                        <label
+                          htmlFor={`add-metric-${metric.id}`}
+                          className="text-sm font-medium leading-none cursor-pointer"
+                        >
+                          {metric.label}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 <div className="flex gap-2">
-                  <Button onClick={addMoreMetrics} disabled={currentMetrics.length === 0 || loading} size="sm">
+                  <Button
+                    onClick={addMoreMetrics}
+                    disabled={currentMetrics.length === 0 || loading || getAvailableMetrics().length === 0}
+                  >
                     {loading && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
                     {loading ? "Adding..." : "Add Selected Metrics"}
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={() => setAddingMetrics(false)}>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowAddMetrics(false)
+                      setCurrentMetrics([])
+                    }}
+                  >
                     Cancel
                   </Button>
                 </div>
               </div>
-            </CardContent>
-          )}
+            </div>
+          </CardContent>
         </Card>
+      )}
+
+      {/* Current Visualization Info */}
+      {selectedIndex && !showAddMetrics && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <LineChart className="h-5 w-5" />
+              Current Visualization: {selectedIndex.name}
+            </CardTitle>
+            <CardDescription>
+              Showing {selectedIndex.metrics.length} metric{selectedIndex.metrics.length !== 1 ? "s" : ""}:{" "}
+              {selectedIndex.metrics.map((m) => getMetricLabel(m.id)).join(", ")}
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      )}
+
+      {!selectedIndex && (
+        <Alert>
+          <AlertDescription>Select an index and choose metrics to start visualizing data.</AlertDescription>
+        </Alert>
       )}
 
       {selectedIndex && selectedIndex.metrics.length === 0 && (
@@ -896,5 +629,270 @@ export default function IndexMetricExplorer() {
         ))}
       </div>
     </div>
+  )
+}
+
+interface MetricChartProps {
+  indexName: string
+  metricData: MetricData
+  onZoomStateChange: (metricId: string, zoomState: ZoomState) => void
+  onDataChange: (metricId: string, data: any[]) => void
+  onRemoveMetric: (metricId: string) => void
+}
+
+const MetricChart: React.FC<MetricChartProps> = ({
+  indexName,
+  metricData,
+  onZoomStateChange,
+  onDataChange,
+  onRemoveMetric,
+}) => {
+  const getMetricLabel = (metricId: string) => {
+    return availableMetrics.find((m) => m.id === metricId)?.label || metricId
+  }
+
+  const handleMouseDown = useCallback(
+    (e: any) => {
+      if (e && e.activeLabel) {
+        onZoomStateChange(metricData.id, {
+          ...metricData.zoomState,
+          refAreaLeft: e.activeLabel,
+          refAreaRight: e.activeLabel,
+          isZooming: true,
+        })
+      }
+    },
+    [metricData.id, metricData.zoomState, onZoomStateChange],
+  )
+
+  const handleMouseMove = useCallback(
+    (e: any) => {
+      if (metricData.zoomState.isZooming && e && e.activeLabel) {
+        onZoomStateChange(metricData.id, {
+          ...metricData.zoomState,
+          refAreaRight: e.activeLabel,
+        })
+      }
+    },
+    [metricData.id, metricData.zoomState, onZoomStateChange],
+  )
+
+  const handleMouseUp = useCallback(() => {
+    if (metricData.zoomState.isZooming) {
+      const { refAreaLeft, refAreaRight } = metricData.zoomState
+
+      if (refAreaLeft && refAreaRight && refAreaLeft !== refAreaRight) {
+        // Zoom in
+        const left = Math.min(refAreaLeft, refAreaRight)
+        const right = Math.max(refAreaLeft, refAreaRight)
+
+        // Filter data to zoom range
+        const zoomedData = metricData.originalData.filter((item) => item.timestamp >= left && item.timestamp <= right)
+
+        onDataChange(metricData.id, zoomedData.length > 0 ? zoomedData : metricData.originalData)
+        onZoomStateChange(metricData.id, {
+          left,
+          right,
+          refAreaLeft: null,
+          refAreaRight: null,
+          isZooming: false,
+        })
+        return
+      }
+
+      onZoomStateChange(metricData.id, {
+        ...metricData.zoomState,
+        refAreaLeft: null,
+        refAreaRight: null,
+        isZooming: false,
+      })
+    }
+  }, [metricData.id, metricData.originalData, metricData.zoomState, onDataChange, onZoomStateChange])
+
+  const resetZoom = useCallback(() => {
+    onDataChange(metricData.id, metricData.originalData)
+    onZoomStateChange(metricData.id, {
+      left: null,
+      right: null,
+      refAreaLeft: null,
+      refAreaRight: null,
+      isZooming: false,
+    })
+  }, [metricData.id, metricData.originalData, onDataChange, onZoomStateChange])
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <LineChart className="h-5 w-5" />
+              {indexName} - {getMetricLabel(metricData.id)}
+            </CardTitle>
+            <CardDescription>Metric: {getMetricLabel(metricData.id)}</CardDescription>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex gap-1">
+              <Badge
+                variant="outline"
+                style={{
+                  borderColor: getMetricColor(metricData.id),
+                  color: getMetricColor(metricData.id),
+                }}
+              >
+                {getMetricLabel(metricData.id)}
+              </Badge>
+            </div>
+            {(metricData.zoomState.left || metricData.zoomState.right) && (
+              <Button variant="outline" size="sm" onClick={resetZoom}>
+                <RotateCcw className="h-4 w-4 mr-1" />
+                Reset Zoom
+              </Button>
+            )}
+            <Button variant="outline" size="sm" onClick={() => onRemoveMetric(metricData.id)}>
+              Remove
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="mb-4 flex items-center gap-2 text-sm text-muted-foreground">
+          <ZoomIn className="h-4 w-4" />
+          Click and drag on the chart to select an area to zoom into
+        </div>
+
+        <ChartContainer
+          config={{
+            [metricData.id]: {
+              label: getMetricLabel(metricData.id),
+              color: getMetricColor(metricData.id),
+            },
+          }}
+          className="h-[500px] relative"
+          style={{
+            userSelect: "none",
+            WebkitUserSelect: "none",
+            MozUserSelect: "none",
+            msUserSelect: "none",
+          }}
+        >
+          <ResponsiveContainer width="100%" height="100%">
+            <RechartsLineChart
+              data={metricData.data}
+              margin={{ top: 20, right: 150, left: 40, bottom: 60 }} // Increased right margin for legend
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              style={{
+                userSelect: "none",
+                WebkitUserSelect: "none",
+                MozUserSelect: "none",
+                msUserSelect: "none",
+              }}
+            >
+              <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+              <XAxis
+                dataKey="timestamp"
+                type="number"
+                scale="time"
+                domain={["dataMin", "dataMax"]}
+                tickFormatter={formatTimestamp}
+                tick={{
+                  fontSize: 12,
+                  userSelect: "none",
+                  pointerEvents: "none",
+                  style: {
+                    userSelect: "none",
+                    WebkitUserSelect: "none",
+                    MozUserSelect: "none",
+                    msUserSelect: "none",
+                    pointerEvents: "none",
+                  },
+                }}
+                angle={-45}
+                textAnchor="end"
+                height={60}
+              />
+              <YAxis
+                tickFormatter={(value) => formatMetricValue(value, "default")}
+                tick={{
+                  fontSize: 12,
+                  userSelect: "none",
+                  pointerEvents: "none",
+                  style: {
+                    userSelect: "none",
+                    WebkitUserSelect: "none",
+                    MozUserSelect: "none",
+                    msUserSelect: "none",
+                    pointerEvents: "none",
+                  },
+                }}
+                width={60}
+              />
+              <ChartTooltip
+                content={<ChartTooltipContent />}
+                labelFormatter={(label) => {
+                  const formatted = formatTimestamp(label as number)
+                  return `Time: ${formatted}`
+                }}
+              />
+              <Legend
+                verticalAlign="middle"
+                align="right"
+                layout="vertical"
+                iconType="line"
+                wrapperStyle={{ paddingLeft: "20px" }}
+              />
+
+              <Line
+                type="linear"
+                dataKey={metricData.id}
+                stroke={getMetricColor(metricData.id)}
+                strokeWidth={2}
+                dot={{ r: 2, fill: getMetricColor(metricData.id) }}
+                activeDot={{ r: 4, strokeWidth: 2, fill: getMetricColor(metricData.id) }}
+                name={getMetricLabel(metricData.id)}
+                connectNulls={true}
+                isAnimationActive={false}
+              />
+
+              {/* Reference area for zoom selection with theme-aware color */}
+              {metricData.zoomState.refAreaLeft && metricData.zoomState.refAreaRight && (
+                <ReferenceArea
+                  x1={metricData.zoomState.refAreaLeft}
+                  x2={metricData.zoomState.refAreaRight}
+                  strokeOpacity={0.5}
+                  fillOpacity={0.1}
+                  fill={getSelectionColor()}
+                  stroke={getSelectionColor()}
+                />
+              )}
+            </RechartsLineChart>
+          </ResponsiveContainer>
+
+          {/* Transparent overlays to prevent text selection on axes */}
+          <div
+            className="absolute bottom-0 left-0 right-0 h-16 pointer-events-none z-10"
+            style={{
+              background: "transparent",
+              userSelect: "none",
+              WebkitUserSelect: "none",
+              MozUserSelect: "none",
+              msUserSelect: "none",
+            }}
+          />
+          <div
+            className="absolute top-0 bottom-0 left-0 w-16 pointer-events-none z-10"
+            style={{
+              background: "transparent",
+              userSelect: "none",
+              WebkitUserSelect: "none",
+              MozUserSelect: "none",
+              msUserSelect: "none",
+            }}
+          />
+        </ChartContainer>
+      </CardContent>
+    </Card>
   )
 }
