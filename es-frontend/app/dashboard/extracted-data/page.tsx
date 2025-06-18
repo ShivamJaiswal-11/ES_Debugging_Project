@@ -37,39 +37,65 @@ const availableIndices = [
   "audit-logs",
 ]
 
-// Available metrics with colors and scales
+// Available metrics with theme-aware RGB colors
 const availableMetrics = [
   {
     id: "docs_count",
     label: "Document Count",
-    color: "hsl(var(--chart-1))",
+    lightColor: "rgb(220, 38, 127)", // Dark pink for light theme
+    darkColor: "rgb(251, 146, 60)", // Light orange for dark theme
     scale: "primary",
   },
   {
     id: "index_total",
     label: "Index Operations",
-    color: "hsl(var(--chart-2))",
+    lightColor: "rgb(37, 99, 235)", // Dark blue for light theme
+    darkColor: "rgb(96, 165, 250)", // Light blue for dark theme
     scale: "secondary",
   },
   {
     id: "search_total",
     label: "Search Operations",
-    color: "hsl(var(--chart-3))",
+    lightColor: "rgb(22, 163, 74)", // Dark green for light theme
+    darkColor: "rgb(74, 222, 128)", // Light green for dark theme
     scale: "secondary",
   },
   {
     id: "refresh_total",
     label: "Refresh Operations",
-    color: "hsl(var(--chart-4))",
+    lightColor: "rgb(202, 138, 4)", // Dark yellow for light theme
+    darkColor: "rgb(250, 204, 21)", // Light yellow for dark theme
     scale: "secondary",
   },
   {
     id: "store_size",
     label: "Storage Size",
-    color: "hsl(var(--chart-5))",
+    lightColor: "rgb(147, 51, 234)", // Dark purple for light theme
+    darkColor: "rgb(196, 181, 253)", // Light purple for dark theme
     scale: "primary",
   },
 ]
+
+// Theme-aware color helper
+const getMetricColor = (metricId: string, isDark?: boolean) => {
+  const metric = availableMetrics.find((m) => m.id === metricId)
+  if (!metric) return "rgb(156, 163, 175)" // Default gray
+
+  // Detect theme from document if not provided
+  if (isDark === undefined) {
+    isDark = document.documentElement.classList.contains("dark")
+  }
+
+  return isDark ? metric.darkColor : metric.lightColor
+}
+
+// Get selection area color based on theme
+const getSelectionColor = (isDark?: boolean) => {
+  if (isDark === undefined) {
+    isDark = document.documentElement.classList.contains("dark")
+  }
+  return isDark ? "rgb(96, 165, 250)" : "rgb(37, 99, 235)" // Light blue for dark, dark blue for light
+}
 
 // Generate mock time-series data for an index
 const generateMockData = (indexName: string, metrics: string[]) => {
@@ -168,7 +194,7 @@ const generateMockData = (indexName: string, metrics: string[]) => {
       // Add realistic patterns and variations - ensure continuous data
       const hourlyPattern = Math.sin((entry.hour / 24) * 2 * Math.PI) * 0.15 + 1
       const dailyTrend = Math.sin((i / 48) * 2 * Math.PI) * 0.1 + 1 // 48 points per day cycle
-      const randomVariation = (0.7 - 0.5) * 0.05
+      const randomVariation = (Math.random() - 0.5) * 0.05
       const overallTrend = (i / 100) * 0.1 // Slight upward trend
 
       entry[metric] = Math.round(baseValue * hourlyPattern * dailyTrend * (1 + randomVariation + overallTrend))
@@ -194,9 +220,21 @@ const formatMetricValue = (value: number, metric: string) => {
   return value.toString()
 }
 
-// Format timestamp for display
-const formatTimestamp = (timestamp: number) => {
-  const date = new Date(timestamp)
+// Format timestamp for display - handle both number and string inputs
+const formatTimestamp = (timestamp: number | string) => {
+  let date: Date
+
+  if (typeof timestamp === "string") {
+    date = new Date(timestamp)
+  } else {
+    date = new Date(timestamp)
+  }
+
+  // Check if date is valid
+  if (isNaN(date.getTime())) {
+    return "Invalid Date"
+  }
+
   return date.toLocaleDateString([], {
     month: "short",
     day: "numeric",
@@ -218,9 +256,8 @@ interface SelectedIndex {
     isZooming: boolean
   }
 }
-// export const dynamic = 'force-dynamic'
+
 export default function IndexMetricExplorer() {
-  
   const router = useRouter()
   const [indexInput, setIndexInput] = useState("")
   const [selectedIndices, setSelectedIndices] = useState<SelectedIndex[]>([])
@@ -381,10 +418,6 @@ export default function IndexMetricExplorer() {
     return availableMetrics.find((m) => m.id === metricId)?.label || metricId
   }
 
-  const getMetricColor = (metricId: string) => {
-    return availableMetrics.find((m) => m.id === metricId)?.color || "hsl(var(--chart-1))"
-  }
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -495,7 +528,14 @@ export default function IndexMetricExplorer() {
                 <div className="flex items-center gap-2">
                   <div className="flex gap-1">
                     {indexData.metrics.map((metric) => (
-                      <Badge key={metric} variant="outline" style={{ borderColor: getMetricColor(metric) }}>
+                      <Badge
+                        key={metric}
+                        variant="outline"
+                        style={{
+                          borderColor: getMetricColor(metric),
+                          color: getMetricColor(metric),
+                        }}
+                      >
                         {getMetricLabel(metric)}
                       </Badge>
                     ))}
@@ -534,7 +574,7 @@ export default function IndexMetricExplorer() {
                 <ResponsiveContainer width="100%" height="100%">
                   <RechartsLineChart
                     data={indexData.data}
-                    margin={{ top: 20, right: 30, left: 40, bottom: 60 }}
+                    margin={{ top: 20, right: 150, left: 40, bottom: 60 }} // Increased right margin for legend
                     onMouseDown={(e) => handleMouseDown(indexData.name, e)}
                     onMouseMove={(e) => handleMouseMove(indexData.name, e)}
                     onMouseUp={() => handleMouseUp(indexData.name)}
@@ -558,34 +598,43 @@ export default function IndexMetricExplorer() {
                     />
                     <ChartTooltip
                       content={<ChartTooltipContent />}
-                      labelFormatter={(value) => `Time: ${formatTimestamp(value as number)}`}
+                      labelFormatter={(value) => {
+                        const formatted = formatTimestamp(value as number)
+                        return `Time: ${formatted}`
+                      }}
                     />
-                    <Legend />
+                    <Legend
+                      verticalAlign="middle"
+                      align="right"
+                      layout="vertical"
+                      iconType="line"
+                      wrapperStyle={{ paddingLeft: "20px" }}
+                    />
 
                     {indexData.metrics.map((metric) => (
                       <Line
                         key={metric}
-                        type="linear" // Ensures straight lines between points
+                        type="linear"
                         dataKey={metric}
                         stroke={getMetricColor(metric)}
                         strokeWidth={2}
-                        dot={{ r: 2 }} // Small dots to show data points
-                        activeDot={{ r: 4, strokeWidth: 2 }}
+                        dot={{ r: 2, fill: getMetricColor(metric) }}
+                        activeDot={{ r: 4, strokeWidth: 2, fill: getMetricColor(metric) }}
                         name={getMetricLabel(metric)}
-                        connectNulls={true} // Connect all points even if some are null
-                        isAnimationActive={false} // Disable animation for better zoom performance
+                        connectNulls={true}
+                        isAnimationActive={false}
                       />
                     ))}
 
-                    {/* Reference area for zoom selection */}
+                    {/* Reference area for zoom selection with theme-aware color */}
                     {indexData.zoomState.refAreaLeft && indexData.zoomState.refAreaRight && (
                       <ReferenceArea
                         x1={indexData.zoomState.refAreaLeft}
                         x2={indexData.zoomState.refAreaRight}
-                        strokeOpacity={0.3}
+                        strokeOpacity={0.5}
                         fillOpacity={0.1}
-                        fill="hsl(var(--primary))"
-                        stroke="hsl(var(--primary))"
+                        fill={getSelectionColor()}
+                        stroke={getSelectionColor()}
                       />
                     )}
                   </RechartsLineChart>
