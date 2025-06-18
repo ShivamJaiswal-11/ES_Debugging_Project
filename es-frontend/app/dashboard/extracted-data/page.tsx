@@ -776,6 +776,7 @@ const MetricChart: React.FC<MetricChartProps> = ({
             msUserSelect: "none",
           }}
         >
+          
           <ResponsiveContainer width="100%" height="100%">
             <RechartsLineChart
               data={metricData.data}
@@ -799,7 +800,7 @@ const MetricChart: React.FC<MetricChartProps> = ({
                 tickFormatter={formatTimestamp}
                 tick={{
                   fontSize: 12,
-                  userSelect: "none",
+                  // userSelect: "none",
                   pointerEvents: "none",
                   style: {
                     userSelect: "none",
@@ -817,7 +818,7 @@ const MetricChart: React.FC<MetricChartProps> = ({
                 tickFormatter={(value) => formatMetricValue(value, "default")}
                 tick={{
                   fontSize: 12,
-                  userSelect: "none",
+                  // userSelect: "none",
                   pointerEvents: "none",
                   style: {
                     userSelect: "none",
@@ -867,8 +868,6 @@ const MetricChart: React.FC<MetricChartProps> = ({
                   stroke={getSelectionColor()}
                 />
               )}
-            </RechartsLineChart>
-          </ResponsiveContainer>
 
           {/* Transparent overlays to prevent text selection on axes */}
           <div
@@ -880,7 +879,7 @@ const MetricChart: React.FC<MetricChartProps> = ({
               MozUserSelect: "none",
               msUserSelect: "none",
             }}
-          />
+            />
           <div
             className="absolute top-0 bottom-0 left-0 w-16 pointer-events-none z-10"
             style={{
@@ -890,7 +889,9 @@ const MetricChart: React.FC<MetricChartProps> = ({
               MozUserSelect: "none",
               msUserSelect: "none",
             }}
-          />
+            />
+            </RechartsLineChart>
+                    </ResponsiveContainer>
         </ChartContainer>
       </CardContent>
     </Card>
