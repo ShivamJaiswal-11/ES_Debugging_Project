@@ -16,7 +16,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
+import { ChartContainer, ChartTooltip } from "@/components/ui/chart"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -254,7 +254,7 @@ interface MetricZoomState {
   right: number | null
   refAreaLeft: number | null
   refAreaRight: number | null
-  isZooming: boolean
+  isSelecting: boolean
 }
 
 interface MetricData {
@@ -284,12 +284,13 @@ function MetricChart({ indexName, metricData, onZoomStateChange, onDataChange, o
 
   const handleMouseDown = useCallback(
     (e: any) => {
-      if (e && e.activeLabel) {
+      if (e && e.activeLabel !== undefined && e.activeLabel !== null) {
+        const timestamp = Number(e.activeLabel)
         onZoomStateChange(metricData.id, {
           ...metricData.zoomState,
-          refAreaLeft: e.activeLabel,
-          refAreaRight: e.activeLabel,
-          isZooming: true,
+          refAreaLeft: timestamp,
+          refAreaRight: timestamp,
+          isSelecting: true,
         })
       }
     },
@@ -298,10 +299,11 @@ function MetricChart({ indexName, metricData, onZoomStateChange, onDataChange, o
 
   const handleMouseMove = useCallback(
     (e: any) => {
-      if (metricData.zoomState.isZooming && e && e.activeLabel) {
+      if (metricData.zoomState.isSelecting && e && e.activeLabel !== undefined && e.activeLabel !== null) {
+        const timestamp = Number(e.activeLabel)
         onZoomStateChange(metricData.id, {
           ...metricData.zoomState,
-          refAreaRight: e.activeLabel,
+          refAreaRight: timestamp,
         })
       }
     },
@@ -309,31 +311,46 @@ function MetricChart({ indexName, metricData, onZoomStateChange, onDataChange, o
   )
 
   const handleMouseUp = useCallback(() => {
-    if (metricData.zoomState.isZooming) {
+    if (metricData.zoomState.isSelecting) {
       const { refAreaLeft, refAreaRight } = metricData.zoomState
 
-      if (refAreaLeft && refAreaRight && refAreaLeft !== refAreaRight) {
-        // Zoom in
+      if (refAreaLeft !== null && refAreaRight !== null && refAreaLeft !== refAreaRight) {
+        // Determine the correct order for left and right bounds
         const left = Math.min(refAreaLeft, refAreaRight)
         const right = Math.max(refAreaLeft, refAreaRight)
 
         // Filter data to zoom range
-        const zoomedData = metricData.originalData.filter((item) => item.timestamp >= left && item.timestamp <= right)
-
-        onDataChange(metricData.id, zoomedData.length > 0 ? zoomedData : metricData.originalData)
-        onZoomStateChange(metricData.id, {
-          left,
-          right,
-          refAreaLeft: null,
-          refAreaRight: null,
-          isZooming: false,
+        const zoomedData = metricData.originalData.filter((item) => {
+          const itemTime = item.timestamp
+          return itemTime >= left && itemTime <= right
         })
+
+        if (zoomedData.length > 1) {
+          // Only zoom if we have more than 1 data point
+          onDataChange(metricData.id, zoomedData)
+          onZoomStateChange(metricData.id, {
+            left,
+            right,
+            refAreaLeft: null,
+            refAreaRight: null,
+            isSelecting: false,
+          })
+        } else {
+          // Reset selection if insufficient data
+          onZoomStateChange(metricData.id, {
+            ...metricData.zoomState,
+            refAreaLeft: null,
+            refAreaRight: null,
+            isSelecting: false,
+          })
+        }
       } else {
+        // Reset selection if no valid range
         onZoomStateChange(metricData.id, {
           ...metricData.zoomState,
           refAreaLeft: null,
           refAreaRight: null,
-          isZooming: false,
+          isSelecting: false,
         })
       }
     }
@@ -346,9 +363,11 @@ function MetricChart({ indexName, metricData, onZoomStateChange, onDataChange, o
       right: null,
       refAreaLeft: null,
       refAreaRight: null,
-      isZooming: false,
+      isSelecting: false,
     })
   }, [metricData.id, metricData.originalData, onDataChange, onZoomStateChange])
+
+  const isZoomed = metricData.zoomState.left !== null || metricData.zoomState.right !== null
 
   return (
     <Card>
@@ -363,11 +382,16 @@ function MetricChart({ indexName, metricData, onZoomStateChange, onDataChange, o
                 <Badge variant="outline" className="text-xs">
                   {metricInfo?.unit || "value"}
                 </Badge>
+                {isZoomed && (
+                  <Badge variant="secondary" className="text-xs">
+                    Zoomed
+                  </Badge>
+                )}
               </CardDescription>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {(metricData.zoomState.left || metricData.zoomState.right) && (
+            {isZoomed && (
               <Button variant="ghost" size="sm" onClick={resetZoom}>
                 <RotateCcw className="h-4 w-4 mr-1" />
                 Reset Zoom
@@ -385,77 +409,162 @@ function MetricChart({ indexName, metricData, onZoomStateChange, onDataChange, o
           Click and drag on the chart to select an area to zoom into
         </div>
 
-        <ChartContainer
-          config={{
-            [metricData.id]: {
-              label: metricInfo?.label || metricData.id,
-              color: metricColor,
-            },
-          }}
-          className="h-[300px] w-full"
-        >
-          <ResponsiveContainer width="100%" height="100%">
-            <RechartsLineChart
-              data={metricData.data}
-              margin={{ top: 20, right: 20, left: 60, bottom: 60 }}
-              onMouseDown={handleMouseDown}
-              onMouseMove={handleMouseMove}
-              onMouseUp={handleMouseUp}
-            >
-              <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-              <XAxis
-                dataKey="timestamp"
-                type="number"
-                scale="time"
-                domain={["dataMin", "dataMax"]}
-                tickFormatter={formatTimestamp}
-                tick={{ fontSize: 12 }}
-                angle={-45}
-                textAnchor="end"
-                height={60}
-              />
-              <YAxis
-                tickFormatter={(value) => formatMetricValue(value, metricData.id)}
-                tick={{ fontSize: 12 }}
-                width={60}
-              />
-              <ChartTooltip
-                content={<ChartTooltipContent />}
-                labelFormatter={(value) => {
-                  const formatted = formatTimestamp(value as number)
-                  return `Time: ${formatted}`
+        <div className="relative">
+          {/* Transparent overlay to prevent text selection */}
+          <div
+            className="absolute inset-0 z-10 pointer-events-none"
+            style={{
+              background: "transparent",
+              userSelect: "none",
+              WebkitUserSelect: "none",
+              MozUserSelect: "none",
+              msUserSelect: "none",
+            }}
+          />
+
+          <ChartContainer
+            config={{
+              [metricData.id]: {
+                label: metricInfo?.label || metricData.id,
+                color: metricColor,
+              },
+            }}
+            className="h-[400px] w-full relative"
+            style={{
+              userSelect: "none",
+              WebkitUserSelect: "none",
+              MozUserSelect: "none",
+              msUserSelect: "none",
+            }}
+          >
+            <ResponsiveContainer width="100%" height="100%">
+              <RechartsLineChart
+                data={metricData.data}
+                margin={{ top: 20, right: 20, left: 60, bottom: 80 }}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                style={{
+                  userSelect: "none",
+                  WebkitUserSelect: "none",
+                  MozUserSelect: "none",
+                  msUserSelect: "none",
                 }}
-                formatter={(value: any) => [
-                  formatMetricValue(value, metricData.id),
-                  metricInfo?.label || metricData.id,
-                ]}
-              />
-
-              <Line
-                type="linear"
-                dataKey={metricData.id}
-                stroke={metricColor}
-                strokeWidth={2}
-                dot={{ r: 2, fill: metricColor }}
-                activeDot={{ r: 4, strokeWidth: 2, fill: metricColor }}
-                connectNulls={true}
-                isAnimationActive={false}
-              />
-
-              {/* Reference area for zoom selection with theme-aware color */}
-              {metricData.zoomState.refAreaLeft && metricData.zoomState.refAreaRight && (
-                <ReferenceArea
-                  x1={metricData.zoomState.refAreaLeft}
-                  x2={metricData.zoomState.refAreaRight}
-                  strokeOpacity={0.5}
-                  fillOpacity={0.1}
-                  fill={getSelectionColor()}
-                  stroke={getSelectionColor()}
+              >
+                <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+                <XAxis
+                  dataKey="timestamp"
+                  type="number"
+                  scale="time"
+                  domain={["dataMin", "dataMax"]}
+                  tickFormatter={formatTimestamp}
+                  tick={{
+                    fontSize: 12,
+                    // userSelect: "none",
+                    pointerEvents: "none",
+                    style: {
+                      userSelect: "none",
+                      WebkitUserSelect: "none",
+                      MozUserSelect: "none",
+                      msUserSelect: "none",
+                      pointerEvents: "none",
+                    },
+                  }}
+                  angle={-45}
+                  textAnchor="end"
+                  height={60}
                 />
-              )}
-            </RechartsLineChart>
-          </ResponsiveContainer>
-        </ChartContainer>
+                <YAxis
+                  tickFormatter={(value) => formatMetricValue(value, metricData.id)}
+                  tick={{
+                    fontSize: 12,
+                    // userSelect: "none",
+                    pointerEvents: "none",
+                    style: {
+                      userSelect: "none",
+                      WebkitUserSelect: "none",
+                      MozUserSelect: "none",
+                      msUserSelect: "none",
+                      pointerEvents: "none",
+                    },
+                  }}
+                  width={60}
+                />
+                <ChartTooltip
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload?.length) return null
+
+                    return (
+                      <div className="rounded-lg border bg-background p-2 shadow-md">
+                        <div className="grid gap-0.5">
+                          <div className="text-xs text-muted-foreground">{formatTimestamp(label as number)}</div>
+                          {payload.map((item, index) => (
+                            <div key={index} className="flex items-center justify-between gap-2 text-sm">
+                              <div className="flex items-center gap-1">
+                                <div className="h-2 w-2 rounded-full" style={{ background: item.color }} />
+                                <span>{metricInfo?.label || metricData.id}</span>
+                              </div>
+                              <span className="font-medium tabular-nums">
+                                {formatMetricValue(item.value as number, metricData.id)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  }}
+                />
+
+                <Line
+                  type="linear"
+                  dataKey={metricData.id}
+                  stroke={metricColor}
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={{ r: 4, strokeWidth: 2, fill: metricColor }}
+                  connectNulls={true}
+                  isAnimationActive={false}
+                />
+
+                {/* Reference area for zoom selection with theme-aware color */}
+                {metricData.zoomState.refAreaLeft !== null &&
+                  metricData.zoomState.refAreaRight !== null &&
+                  metricData.zoomState.refAreaLeft !== metricData.zoomState.refAreaRight && (
+                    <ReferenceArea
+                      x1={metricData.zoomState.refAreaLeft}
+                      x2={metricData.zoomState.refAreaRight}
+                      strokeOpacity={0.5}
+                      fillOpacity={0.1}
+                      fill={getSelectionColor()}
+                      stroke={getSelectionColor()}
+                    />
+                  )}
+              </RechartsLineChart>
+            </ResponsiveContainer>
+          </ChartContainer>
+
+          {/* Additional overlay specifically for axis areas */}
+          <div
+            className="absolute bottom-0 left-0 right-0 h-20 pointer-events-none z-20"
+            style={{
+              background: "transparent",
+              userSelect: "none",
+              WebkitUserSelect: "none",
+              MozUserSelect: "none",
+              msUserSelect: "none",
+            }}
+          />
+          <div
+            className="absolute top-0 bottom-0 left-0 w-16 pointer-events-none z-20"
+            style={{
+              background: "transparent",
+              userSelect: "none",
+              WebkitUserSelect: "none",
+              MozUserSelect: "none",
+              msUserSelect: "none",
+            }}
+          />
+        </div>
       </CardContent>
     </Card>
   )
@@ -501,7 +610,7 @@ export default function IndexMetricExplorer() {
           right: null,
           refAreaLeft: null,
           refAreaRight: null,
-          isZooming: false,
+          isSelecting: false,
         },
       }))
 
@@ -541,7 +650,7 @@ export default function IndexMetricExplorer() {
           right: null,
           refAreaLeft: null,
           refAreaRight: null,
-          isZooming: false,
+          isSelecting: false,
         },
       }))
 
