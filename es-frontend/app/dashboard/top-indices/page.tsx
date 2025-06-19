@@ -47,6 +47,7 @@ const optionLists = [
 export default function TopIndices() {
   const [indices, setIndices] = useState<IndexInfo[]>([])
   const [indicesList, setIndicesList] = useState<string[]>([])
+  const [topNIndicesList, setTopNIndicesList] = useState<string[]>([])
   const [filteredIndices, setFilteredIndices] = useState<IndexInfo[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [loading, setLoading] = useState(false)
@@ -61,6 +62,8 @@ export default function TopIndices() {
     .get<string[]>("http://127.0.0.1:8000/indices")
     .then(async (res) => {
       const indexNames = res.data
+      setIndicesList(indexNames)
+      localStorage.setItem("indices_list", JSON.stringify(indexNames))
       // console.log(res.data)
         const indexInfoResponses= await Promise.all(indexNames.map((index) =>
           axios
@@ -177,6 +180,9 @@ export default function TopIndices() {
     .get<Sorted_index[]>(`http://127.0.0.1:8000/top-indices?n=${n_val_num}&sort_by=${sortBy}`)
     .then(async (res) => {
       const indexNames = res.data
+      setTopNIndicesList(indexNames.map((index_data) => index_data.index))
+      localStorage.setItem("top_n_indices_list", JSON.stringify(indexNames.map((index_data) => index_data.index)))
+      // console.log("Top N Indices:", indexNames)
       console.log(res.data)
         const indexInfoResponses= await Promise.all(indexNames.map((index_data) =>
           axios
@@ -281,8 +287,17 @@ export default function TopIndices() {
       </div>
       <Card>
         <CardHeader>
-          <CardTitle>Indices ({filteredIndices.length})</CardTitle>
-          <CardDescription>Overview of top N indices in your cluster</CardDescription>
+          <div className="flex flex-row items-center justify-between">
+            <div className="flex flex-col">
+              <CardTitle>Indices ({filteredIndices.length})</CardTitle>
+              <CardDescription>Overview of top N indices in your cluster</CardDescription>
+            </div>
+            <div>
+              <Button className="hover:cursor-pointer" onClick={() => router.push("/dashboard/extracted-data")}>
+                Extract Time Series Data
+              </Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <Table>

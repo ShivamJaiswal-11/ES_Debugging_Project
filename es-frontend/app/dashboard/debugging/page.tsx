@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button"
 import { Send, Copy, Share, Zap, Play, RefreshCw } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-// import { set } from "react-hook-form"
 
 interface NodeInfo {
   name: string
@@ -124,13 +123,34 @@ export default function JStackDiagnostics() {
       }
     )
   }
+  const handleAnalyze = () => {
+    setAnalysis("") 
+    setLoading(true)
+    toast.loading("Analyzing issue...")
+    axios
+      .get("http://127.0.0.1:8000/analyze-by-tasks")
+      .then((res) => {
+        setAnalysis(res.data.analysis)
+        toast.dismiss()
+        toast.success("Analysis completed successfully.")
+        setLoading(false)
+      }
+      )
+      .catch((err) => {
+        // console.error("Error analyzing issue:", err)
+        toast.dismiss()
+        toast.error("Failed to analyze the issue. Please try again.")
+        setLoading(false)
+      }
+    )
+  }
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">LLM-Powered Jstack Diagnostics</h1>
+        <h1 className="text-3xl font-bold tracking-tight">LLM-Powered Debugging</h1>
         <p className="text-muted-foreground">
-          Fire Jstack to analyze your Elasticsearch cluster and get AI-generated recommendations.
+          Fire Jstack, Run Hot_threads, and Get Tasks responses to analyze your Elasticsearch cluster and get AI-generated recommendations.
         </p>
       </div>
         <Button onClick={fetchNodes} className="hover:cursor-pointer" disabled={loading}>
@@ -173,10 +193,16 @@ export default function JStackDiagnostics() {
               ))}
             </TableBody>
           </Table>
-          <Button onClick={onClickRunHotThread} disabled={loading} className="w-full hover:cursor-pointer">
-            <Send className={`mr-2 h-4 w-4 ${loading ? "animate-pulse" : ""}`} />
-            Run Hot Threads
-          </Button>
+          <div className="flex flex-row w-full space-x-4">
+            <Button onClick={onClickRunHotThread} disabled={loading} className="w-1/2 hover:cursor-pointer bg-sky-900 hover:bg-sky-700 dark:bg-sky-200 dark:hover:bg-sky-100">
+              <Send className={`mr-2 h-4 w-4 ${loading ? "animate-pulse" : ""}`} />
+              Analyse Hot_thread Output
+            </Button>
+            <Button onClick={handleAnalyze} disabled={loading} className="w-1/2 hover:cursor-pointer  bg-cyan-900 hover:bg-cyan-700 dark:bg-cyan-200 dark:hover:bg-cyan-100">
+              <Send className={`mr-2 h-4 w-4 ${loading ? "animate-pulse" : ""}`} />
+              Analyse Tasks Output
+            </Button>
+          </div>
         </CardContent>
       </Card>
       {analysis && (

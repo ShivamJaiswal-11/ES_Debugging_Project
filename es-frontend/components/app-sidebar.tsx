@@ -38,8 +38,8 @@ const navigationItems = [
   icon: BarChart3,
 },
   {
-    title: "JStack Diagnostics",
-    url: "/dashboard/jstack-diagnostics",
+    title: "Cluster Debugging",
+    url: "/dashboard/debugging",
     icon: Zap,
   },
   {

@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 from fastapi import APIRouter, HTTPException, Query, Request
 from app.core.es import init_es_client
 from app.core.models import ClusterConfig, NodeRequest
-from app.core.agent import analyze_with_agent
+from app.core.agent import analyze_with_agent, analyze_with_multi_agent
 
 
 router = APIRouter()
@@ -226,6 +226,14 @@ async def get_hot_threads():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/tasks")
+def get_tasks():
+    try:
+        response = es_client.transport.perform_request("GET", f"/_tasks")
+        return response
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
 def jstack_for_agent(pid: int, count: int = 3, interval: int = 1) -> str:
     outputs = []
     for _ in range(count):
@@ -245,11 +253,20 @@ def jstack_for_agent(pid: int, count: int = 3, interval: int = 1) -> str:
     
     return "\n\n--- JSTACK SNAPSHOT ---\n\n".join(outputs)
 
+@router.get("/analyze-by-tasks")
+def analyze_tasks():
+    try:
+        tasks_output = es_client.transport.perform_request("GET", f"/_tasks")
+        analysis = analyze_with_multi_agent(tasks_output, source="tasks")
+        return {"analysis": analysis}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+
 @router.post("/analyze-by-node")
 def analyze_node(request: NodeRequest):
-    es = Elasticsearch("http://localhost:9200")
     try:
-        nodes_info = es.nodes.info()
+        nodes_info = es_client.nodes.info()
         pid = None
         for node_id, node_data in nodes_info["nodes"].items():
             if node_data["name"] == request.node_name:
@@ -258,7 +275,7 @@ def analyze_node(request: NodeRequest):
         if pid is None:
             raise HTTPException(status_code=404, detail="Node not found or missing PID")
         jstack_output = jstack_for_agent(pid)
-        analysis = analyze_with_agent(jstack_output, source="jstack")
+        analysis = analyze_with_multi_agent(jstack_output, source="jstack")
         return {"analysis": analysis}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
@@ -270,11 +287,12 @@ def analyze_hot_threads():
             "curl", "-XGET", "http://localhost:9200/_nodes/hot_threads"
         ], capture_output=True, text=True, check=True)
         output = result.stdout
-        analysis = analyze_with_agent(output, source="hot_threads")
+        analysis = analyze_with_multi_agent(output, source="hot_threads")
         # analysis1= AgentManager({"hot_threads": output})
         return {"analysis": analysis}
     except subprocess.CalledProcessError as e:
         raise HTTPException(status_code=500, detail=f"hot_threads failed: {e.stderr}")
+
 
 
 @router.post("/queries/monitor")

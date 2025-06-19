@@ -1,43 +1,20 @@
 "use client"
 
 import type React from "react"
-
-import { useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
+import { useState, useCallback, useEffect } from "react"
 import { ArrowLeft, LineChart, RefreshCw, Search, ZoomIn, RotateCcw, Plus, RotateCw } from "lucide-react"
-import {
-  Line,
-  LineChart as RechartsLineChart,
-  ResponsiveContainer,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Legend,
-  ReferenceArea,
-} from "recharts"
-
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Line, LineChart as RechartsLineChart, ResponsiveContainer, XAxis, YAxis, CartesianGrid, Legend, ReferenceArea } from "recharts"
+import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
 
-// Available indices
-const availableIndices = [
-  "logs-2024.01",
-  "users",
-  "products",
-  "orders-2024",
-  "analytics",
-  "sessions",
-  "events-2024",
-  "metrics",
-  "audit-logs",
-]
 
 // Available metrics with theme-aware RGB colors
 const availableMetrics = [
@@ -273,6 +250,19 @@ export default function IndexMetricExplorer() {
   const [loading, setLoading] = useState(false)
   const [addingMetrics, setAddingMetrics] = useState(false)
   const [showAddMetrics, setShowAddMetrics] = useState(false)
+  const [topNIndices, setTopNIndices] = useState<string[]>([])
+
+  useEffect(() => { 
+    // Load top N indices from localStorage or use default
+    const storedTopNIndices = localStorage.getItem("top_n_indices_list")
+    const storedIndices = localStorage.getItem("indices_list") 
+
+    if (storedTopNIndices) {
+      setTopNIndices(JSON.parse(storedTopNIndices))
+    } else if(storedIndices){
+      setTopNIndices(JSON.parse(storedIndices))
+    }
+  }, [])
 
   const handleIndexSelect = (indexName: string) => {
     if (indexName) {
@@ -467,7 +457,7 @@ export default function IndexMetricExplorer() {
                       <SelectValue placeholder="Select an index..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {availableIndices.map((index) => (
+                      {topNIndices.map((index) => (
                         <SelectItem key={index} value={index}>
                           {index}
                         </SelectItem>
