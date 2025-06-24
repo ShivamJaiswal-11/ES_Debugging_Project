@@ -5,8 +5,8 @@ from elasticsearch import Elasticsearch
 from fastapi.responses import JSONResponse
 from fastapi import APIRouter, HTTPException, Query, Request
 from app.core.es import init_es_client
+from app.core.agent import analyze_with_multi_agent
 from app.core.models import ClusterConfig, NodeRequest
-from app.core.agent import analyze_with_agent, analyze_with_multi_agent
 
 
 router = APIRouter()
@@ -196,7 +196,7 @@ async def get_local_node_pids():
 def run_jstack(pid: int = Query(..., description="PID of the Java process")):
     try:
         result = subprocess.run(
-            ["jcmd", "-l", str(pid)],  #Using jcmd instead of jstack for better formatted results
+            ["jstack", "-l", str(pid)],  #Using jcmd instead of jstack for better formatted results
             capture_output=True,
             text=True,
             timeout=10
@@ -293,6 +293,61 @@ def analyze_hot_threads():
     except subprocess.CalledProcessError as e:
         raise HTTPException(status_code=500, detail=f"hot_threads failed: {e.stderr}")
 
+
+@router.get("/debug/full-dump")
+def get_combined_diagnostics():
+    try:
+        # Get all nodes
+        node_info = es_client.nodes.info()
+        nodes = node_info["nodes"]
+        node_pids = {}
+
+        for node_id, node_data in nodes.items():
+            pid = node_data.get("process", {}).get("id")
+            if not pid:
+                raise HTTPException(status_code=500, detail=f"PID not found for node {node_id}")
+            node_pids[node_id] = pid
+        num_nodes = len(node_pids)
+        jstack_char_budget = 6500   
+        hot_threads_char_budget = 6500 
+        tasks_char_budget = 6500 
+        jstack_per_node_budget = jstack_char_budget // num_nodes
+
+        # 1. JStack
+        jstack_outputs = []
+        for node_id, pid in node_pids.items():
+            raw_output = run_jstack(pid)["output"]
+            # print(raw_output)
+            # print(node_pids)
+            jstack_outputs.append(raw_output[:jstack_per_node_budget])
+            # jstack_outputs[node_id] = raw_output[:jstack_per_node_budget]
+
+        
+        # 2. Hot Threads
+        hot_threads_raw = es_client.transport.perform_request("GET", "/_nodes/hot_threads?threads=999")
+        hot_threads_str = str(hot_threads_raw)[:hot_threads_char_budget]
+
+        # 3. Tasks
+        task_data = es_client.transport.perform_request("GET", "/_tasks")
+        task_str = str(task_data)[:tasks_char_budget]
+
+        return {
+            "jstack": jstack_outputs,
+            "hot_threads": hot_threads_str,
+            "tasks": task_str
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate diagnostics: {str(e)}")
+
+@router.get("/analyze-by-full-dump")
+def analyze_tasks():
+    try:
+        tasks_output = get_combined_diagnostics()
+        analysis = analyze_with_multi_agent(tasks_output, source="jstack + hot_threads + tasks")
+        return {"analysis": analysis}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
 
 @router.post("/queries/monitor")

@@ -9,6 +9,8 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
 import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Form,  FormControl,  FormField,  FormItem,  FormLabel,  FormMessage } from "@/components/ui/form"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ComboBox } from "@/components/combo-box"
@@ -28,6 +30,10 @@ const formSchema = z.object({
 
 const optionLists = [
   {
+    value:"clusters_list",
+    label:"Preloaded",
+  },
+  {
     value: "local",
     label: "Local Machine",
   },
@@ -37,12 +43,22 @@ const optionLists = [
   },
 ]
 
+interface cluster_info{
+  id: string
+  name: string
+  url: string
+}
+
 export default function HomePage() {
 
   const [disableButton, setDisableButton] = useState(false)
+  const [disableButton_1, setDisableButton_1] = useState(false)
+  
   const router = useRouter()
+  const [selectedCluster , setSelectedCluster]=useState<string>("")
   const [val, setVal] = useState("")
   const { theme, setTheme } = useTheme()
+  const [clusterList, setClusterList]=useState<cluster_info[]>([{id:"c1",name:"Cluster_1",url:"http://localhost:9200/"},{id:"c2",name:"Cluster_2",url:"http://localhost:9201/"}])
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -206,8 +222,37 @@ export default function HomePage() {
             </div>
           </div>
           :
-          <div className="text-center text-sm text-muted-foreground mb-4">
-            <p>Please select a source to continue.</p>
+          <div>
+            { val==="clusters_list" ? 
+              <div>       
+                <RadioGroup value={selectedCluster} onValueChange={setSelectedCluster}>
+                  {clusterList.map((cluster) => (
+                    <div key={cluster.id} className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-muted/50 bg-white dark:bg-black hover:dark:bg-muted/50">
+                      <RadioGroupItem value={cluster.id} id={cluster.id} />
+                      <Label htmlFor={cluster.id} className="flex-1 cursor-pointer">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="font-medium">{cluster.name}</div>
+                            <div className="text-sm text-muted-foreground">{cluster.url}</div>
+                            {/* <div className="text-sm text-muted-foreground">{cluster.nodes} nodes</div> */}
+                          </div>
+                          {/* <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(cluster.status)}`}>
+                            {cluster.status}
+                          </span> */}
+                        </div>
+                      </Label>
+                    </div>
+                  ))}
+                </RadioGroup>
+                <div className="pt-8 w-full flex justify-center pb-8">
+                  <Button type="submit" className={`w-3/4 h-12 hover:cursor-pointer enabled:${disableButton_1}`} disabled={disableButton_1}>Continue</Button>
+                </div>
+              </div>
+            :
+              <div className="text-center text-sm text-muted-foreground mb-4">
+              <p>Please select a source to continue.</p>
+              </div>
+            }
           </div>}
           </div>
         }

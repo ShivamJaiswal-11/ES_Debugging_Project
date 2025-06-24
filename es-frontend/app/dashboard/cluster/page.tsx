@@ -32,7 +32,7 @@ export default function ClusterOverview() {
       .get("http://127.0.0.1:8000/cluster/health")
       .then((response) => {
         const data = response.data
-
+        // console.log(data)
         const health: ClusterHealth = {
           status: data.status,
           cluster_name: data.cluster_name,

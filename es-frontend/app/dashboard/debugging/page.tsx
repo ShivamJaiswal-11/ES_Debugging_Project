@@ -67,24 +67,43 @@ export default function JStackDiagnostics() {
       }
     }
   }, [router])
-  const  onClickRunHotThread= async () => {
+  const onClickRunHotThread = async () => {
     setAnalysis("") 
-    toast.loading("Running hot threads analysis... Wait!")
+    toast.loading("Analyzing hot threads Output...")
     setLoading(true)
-      axios.get("http://127.0.0.1:8000/analyze-hot-threads")
-        .then((res) => {
-          const hotThreads = res.data.analysis
-          setAnalysis(hotThreads)
-          toast.dismiss()
-          toast.success("Hot threads analysis completed successfully.")
-          setLoading(false)
-        })
-        .catch((err) => {
-          // console.error("Error fetching hot threads:", err)
-          toast.error("Failed to fetch hot threads. Please try again.")
-          setLoading(false)
-          toast.dismiss()
-        })
+    axios.get("http://127.0.0.1:8000/analyze-hot-threads")
+    .then((res) => {
+      const hotThreads = res.data.analysis
+      setAnalysis(hotThreads)
+      toast.dismiss()
+      toast.success("Hot threads analysis completed.")
+      setLoading(false)
+    })
+    .catch((err) => {
+      // console.error("Error fetching hot threads:", err)
+      toast.error("Failed to fetch hot threads. Please try again.")
+      setLoading(false)
+      toast.dismiss()
+    })
+  }
+  const onClickRunFullAnalysis = async () => {
+    setAnalysis("") 
+    toast.loading("Analyzing all outputs...")
+    setLoading(true)
+    axios.get("http://127.0.0.1:8000/analyze-by-full-dump")
+    .then((res) => {
+      const hotThreads = res.data.analysis
+      setAnalysis(hotThreads)
+      toast.dismiss()
+      toast.success("Analysis completed.")
+      setLoading(false)
+    })
+    .catch((err) => {
+      // console.error("Error fetching hot threads:", err)
+      toast.error("Failed to fetch outputs. Please try again.")
+      setLoading(false)
+      toast.dismiss()
+    })
   }
 
   const copyToClipboard = () => {
@@ -105,13 +124,13 @@ export default function JStackDiagnostics() {
   const handleDiagnose = (indexName: string) => {
     setAnalysis("") 
     setLoading(true)
-    toast.loading("Analyzing issue...")
+    toast.loading("Analyzing JStack Output...")
     axios
       .post("http://127.0.0.1:8000/analyze-by-node", { node_name: indexName })
       .then((res) => {
         setAnalysis(res.data.analysis)
         toast.dismiss()
-        toast.success("Analysis completed successfully.")
+        toast.success("JStack analysis completed.")
         setLoading(false)
       }
       )
@@ -126,13 +145,13 @@ export default function JStackDiagnostics() {
   const handleAnalyze = () => {
     setAnalysis("") 
     setLoading(true)
-    toast.loading("Analyzing issue...")
+    toast.loading("Analyzing Running Tasks...")
     axios
       .get("http://127.0.0.1:8000/analyze-by-tasks")
       .then((res) => {
         setAnalysis(res.data.analysis)
         toast.dismiss()
-        toast.success("Analysis completed successfully.")
+        toast.success("Running Tasks Analysis completed.")
         setLoading(false)
       }
       )
@@ -193,15 +212,23 @@ export default function JStackDiagnostics() {
               ))}
             </TableBody>
           </Table>
-          <div className="flex flex-row w-full space-x-4">
-            <Button onClick={onClickRunHotThread} disabled={loading} className="w-1/2 hover:cursor-pointer bg-sky-900 hover:bg-sky-700 dark:bg-sky-200 dark:hover:bg-sky-100">
-              <Send className={`mr-2 h-4 w-4 ${loading ? "animate-pulse" : ""}`} />
-              Analyse Hot_thread Output
-            </Button>
-            <Button onClick={handleAnalyze} disabled={loading} className="w-1/2 hover:cursor-pointer  bg-cyan-900 hover:bg-cyan-700 dark:bg-cyan-200 dark:hover:bg-cyan-100">
-              <Send className={`mr-2 h-4 w-4 ${loading ? "animate-pulse" : ""}`} />
-              Analyse Tasks Output
-            </Button>
+          <div className="flex flex-col space-y-4">
+            <div className="flex flex-row w-full space-x-4">
+              <Button onClick={onClickRunHotThread} disabled={loading} className="w-1/2 hover:cursor-pointer bg-sky-900 hover:bg-sky-700 dark:bg-sky-200 dark:hover:bg-sky-100">
+                <Send className={`mr-2 h-4 w-4 ${loading ? "animate-pulse" : ""}`} />
+                Analyse Hot_thread Output
+              </Button>
+              <Button onClick={handleAnalyze} disabled={loading} className="w-1/2 hover:cursor-pointer  bg-cyan-900 hover:bg-cyan-700 dark:bg-cyan-200 dark:hover:bg-cyan-100">
+                <Send className={`mr-2 h-4 w-4 ${loading ? "animate-pulse" : ""}`} />
+                Analyse Tasks Output
+              </Button>
+            </div>
+            <div className="flex justify-center pl-4">
+              <Button onClick={onClickRunFullAnalysis} disabled={loading} className="w-full hover:cursor-pointer  bg-zinc-800 hover:bg-zinc-700 dark:bg-zinc-200 dark:hover:bg-zinc-100">
+                <Send className={`mr-2 h-4 w-4 ${loading ? "animate-pulse" : ""}`} />
+                Analyse All Outputs
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

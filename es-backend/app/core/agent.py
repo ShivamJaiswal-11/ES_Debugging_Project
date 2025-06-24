@@ -2,6 +2,8 @@
 from agno.agent import Agent
 from agno.models.groq import Groq
 # from agno.team.team import Team
+
+from agno.tools.duckduckgo import DuckDuckGoTools
 from fastapi import HTTPException
 
 
@@ -56,10 +58,12 @@ jstack_agent = Agent(
     instructions=[
         "You are a JVM debugging expert.",
         "Input is a JStack output.",
-        "Return JSON: {'summary': [...], 'explanation': '...'}",
+        "Return Your Answer as : 'summary': [...], 'explanation': '...'",
+        "Don't return the <think>...</think> part",
         "Summary: key performance issues in bullets (e.g. deadlocks, blocking, high CPU).",
         "Explanation: detailed diagnostics + recommendations."
     ],
+    tools=[DuckDuckGoTools()],   
     markdown=True
 )
 
@@ -71,10 +75,12 @@ hotthreads_agent = Agent(
     instructions=[
         "You are an expert in Elasticsearch performance tuning.",
         "Input is a hot_threads output.",
-        "Return JSON: {'summary': [...], 'explanation': '...'}",
+        "Return Your Answer as : 'summary': [...], 'explanation': '...'",
+        "Don't return the <think>...</think> part",
         "Summary: top CPU-intensive threads or blocking ops.",
         "Explanation: performance issues and what they mean."
     ],
+    tools=[DuckDuckGoTools()],   
     markdown=True
 )
 
@@ -86,21 +92,45 @@ tasks_agent = Agent(
     instructions=[
         "You analyze Elasticsearch _tasks API output to find stuck, long-running, or high-load tasks.",
         "Don't ask for more data",
-        "Return JSON: {'summary': [...], 'explanation': '...'}",
+        "Return Your Answer as : 'summary': [...], 'explanation': '...'",
+        "Don't return the <think>...</think> part",
         "Summary: stuck or long-running tasks in bullets.",
         "Explanation: root cause and suggested actions."
     ],
+    tools=[DuckDuckGoTools()],   
+    markdown=True
+)
+
+combined_diagnostics_agent = Agent(
+    name="System Diagnostic Agent",
+    role="Analyze combined diagnostic data from Elasticsearch including jstack, hot_threads, and tasks output.",
+    model=Groq(id="deepseek-r1-distill-llama-70b"),
+    instructions=[
+    "You are an expert in diagnosing Java and Elasticsearch performance problems.",
+    "Input will be a dictionary with three fields: 'jstack', 'hot_threads', and 'tasks'.",
+    "'jstack' contains thread dumps for each node, 'hot_threads' contains CPU-heavy thread traces, and 'tasks' contains currently running or stuck Elasticsearch tasks.",
+    "Read all three inputs and identify any critical performance issues, deadlocks, blocking IO, thread starvation, long-running queries, or stuck tasks.",
+    "Return Your Answer as : 'summary': [...], 'explanation': '...'",
+    "Don't return the <think>...</think> part",
+    "'summary': 4–6 bullet points (start each with •) that capture high-level issues, written for an operations engineer.",
+    "'explanation': a well-structured paragraph with details of each finding and suggestions to resolve them. Avoid developer/internal terms.",
+    "Ensure you explain what is happening and how it affects performance, e.g., high CPU from hot threads, waiting threads in jstack, or long-running tasks.",
+    "Keep output readable and concise. Do not echo the raw inputs. Do not include agent system messages or tool call thoughts."
+    ],
+    tools=[DuckDuckGoTools()],   
     markdown=True
 )
 
 def analyze_with_multi_agent(diagnostic_output: str, source: str = "jstack") -> str:
-    truncated_output = diagnostic_output[:20000]
+    truncated_output = diagnostic_output
     if source.lower() == "jstack":
         analysis_Agent = jstack_agent
     elif source.lower() == "hot_threads":
         analysis_Agent = hotthreads_agent
     elif source.lower() == "tasks":
         analysis_Agent = tasks_agent
+    elif source.lower() == "jstack + hot_threads + tasks":
+        analysis_Agent = combined_diagnostics_agent
     else:
         raise HTTPException(status_code=400, detail="Unsupported diagnostic source")
     try:
