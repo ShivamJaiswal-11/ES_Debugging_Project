@@ -14,6 +14,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import axios from "axios"
+import { set } from "react-hook-form"
 
 
 // Available metrics with theme-aware RGB colors
@@ -76,116 +78,7 @@ const getSelectionColor = (isDark?: boolean) => {
   return isDark ? "rgb(96, 165, 250)" : "rgb(37, 99, 235)" // Light blue for dark, dark blue for light
 }
 
-// Generate mock time-series data for an index
-const generateMockData = (indexName: string, metrics: string[]) => {
-  const now = new Date()
-  const data = []
 
-  for (let i = 0; i < 100; i++) {
-    // 100 data points for better zoom demonstration
-    const timestamp = new Date(now.getTime() - (99 - i) * 30 * 60 * 1000) // Every 30 minutes
-    const entry: Record<string, any> = {
-      timestamp: timestamp.getTime(), // Use timestamp for better zoom handling
-      timestampStr: timestamp.toISOString(),
-      hour: timestamp.getHours(),
-      index: i,
-    }
-
-    metrics.forEach((metric) => {
-      let baseValue = 0
-
-      // Different base values for different metrics and indices
-      switch (metric) {
-        case "docs_count":
-          baseValue =
-            indexName === "logs-2024.01"
-              ? 1250000
-              : indexName === "users"
-                ? 45000
-                : indexName === "products"
-                  ? 12000
-                  : indexName === "orders-2024"
-                    ? 890000
-                    : indexName === "analytics"
-                      ? 2100000
-                      : indexName === "sessions"
-                        ? 750000
-                        : 500000
-          break
-        case "index_total":
-          baseValue =
-            indexName === "logs-2024.01"
-              ? 25000
-              : indexName === "users"
-                ? 1500
-                : indexName === "products"
-                  ? 800
-                  : indexName === "orders-2024"
-                    ? 12000
-                    : indexName === "analytics"
-                      ? 18000
-                      : 8000
-          break
-        case "search_total":
-          baseValue =
-            indexName === "logs-2024.01"
-              ? 85000
-              : indexName === "users"
-                ? 120000
-                : indexName === "products"
-                  ? 180000
-                  : indexName === "orders-2024"
-                    ? 65000
-                    : indexName === "analytics"
-                      ? 95000
-                      : 75000
-          break
-        case "refresh_total":
-          baseValue =
-            indexName === "logs-2024.01"
-              ? 1200
-              : indexName === "users"
-                ? 300
-                : indexName === "products"
-                  ? 250
-                  : indexName === "orders-2024"
-                    ? 800
-                    : indexName === "analytics"
-                      ? 1500
-                      : 600
-          break
-        case "store_size":
-          baseValue =
-            indexName === "logs-2024.01"
-              ? 2100
-              : indexName === "users"
-                ? 125
-                : indexName === "products"
-                  ? 45
-                  : indexName === "orders-2024"
-                    ? 1800
-                    : indexName === "analytics"
-                      ? 3200
-                      : 1000
-          break
-      }
-
-      // Add realistic patterns and variations - ensure continuous data
-      const hourlyPattern = Math.sin((entry.hour / 24) * 2 * Math.PI) * 0.15 + 1
-      const dailyTrend = Math.sin((i / 48) * 2 * Math.PI) * 0.1 + 1 // 48 points per day cycle
-      const randomVariation = (Math.random() - 0.5) * 0.05
-      const overallTrend = (i / 100) * 0.1 // Slight upward trend
-
-      entry[metric] = Math.round(baseValue * hourlyPattern * dailyTrend * (1 + randomVariation + overallTrend))
-    })
-
-    data.push(entry)
-  }
-
-  return data
-}
-
-// Format metric values for display
 const formatMetricValue = (value: number, metric: string) => {
   if (metric === "store_size") {
     return value > 1000 ? `${(value / 1000).toFixed(1)}GB` : `${value}MB`
@@ -248,10 +141,51 @@ export default function IndexMetricExplorer() {
   const [selectedIndex, setSelectedIndex] = useState<SelectedIndex | null>(null)
   const [currentMetrics, setCurrentMetrics] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
+  const [data, setData] = useState<any[]>([])
   const [addingMetrics, setAddingMetrics] = useState(false)
   const [showAddMetrics, setShowAddMetrics] = useState(false)
   const [topNIndices, setTopNIndices] = useState<string[]>([])
 
+  const generateMockData = (indexName: string, metrics: string[]) => {
+  const now = new Date()
+  const data = [{"docs_count" : 465010,"hour" : 14,"index" : 0,"timestamp" :1751187374566,"timestampStr" : "2025-06-29T08:56:14.566Z"}]
+ 
+  axios.post("http://127.0.0.1:8000/query/metric", {
+    "expr": "sum(rate(node_nfs_rpc_authentication_refreshes_total{}[$__rate_interval]))",
+    "from_time": "1751359995000",
+    "to_time": "1751360621301"
+    }).then((response) => {
+      console.log("Data fetched successfully:", response.data)
+      // setData(response.data)
+      // Process the data as needed
+      setData(response.data)
+      return response.data
+    }).catch((error) => {
+      console.error("Error fetching data:", error)
+    })
+    // .finally(() => {
+    //   return data
+    // })
+    return data
+}
+  
+  const extractData =async(indexName: string, metrics: string[])=>
+  {
+    await axios.post("http://127.0.0.1:8000/query/metric", {
+    "expr": "sum(rate(node_nfs_rpc_authentication_refreshes_total{}[$__rate_interval]))",
+    "from_time": "1751359995000",
+    "to_time": "1751360621301"
+    }).then((response) => {
+      // console.log("Data fetched successfully:", response.data)
+      setData(response.data)
+      // Process the data as needed
+    }).catch((error) => {
+      console.error("Error fetching data:", error)
+    })
+    .finally(() => {
+      return data
+    })
+  }
   useEffect(() => { 
     // Load top N indices from localStorage or use default
     const storedTopNIndices = localStorage.getItem("top_n_indices_list")
@@ -262,7 +196,8 @@ export default function IndexMetricExplorer() {
     } else if(storedIndices){
       setTopNIndices(JSON.parse(storedIndices))
     }
-  }, [])
+    
+  }, [data])
 
   const handleIndexSelect = (indexName: string) => {
     if (indexName) {
@@ -276,20 +211,61 @@ export default function IndexMetricExplorer() {
 
   const addIndexWithMetrics = async () => {
     if (!indexInput.trim() || currentMetrics.length === 0) return
-
+    
     setLoading(true)
     try {
       // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      // await new Promise((resolve) => setTimeout(resolve, 1000))
+      // Fetch data from API
+      const org_data=localStorage.getItem("extracted_data___")
+      if(!org_data){
+        axios.post("http://127.0.0.1:8000/query/metric", {
+        "expr": "sum(rate(node_nfs_rpc_authentication_refreshes_total{}[$__rate_interval]))",
+        "from_time": "1751359995000",
+        "to_time": "1751360621301"
+        }).then((response) => {
+          // console.log("Data fetched successfully:", response.data)
+          setData(response.data)
+          // const originalData = generateMockData(indexInput, currentMetrics)
+          const originalData = response.data
+          localStorage.setItem("extracted_data_", JSON.stringify(response.data))
+          localStorage.setItem("extracted_data__", JSON.stringify(originalData))
+          const metricDataObjects: MetricData[] = currentMetrics.map((metricId) => ({
+          id: metricId,
+          data: originalData,
+          originalData: originalData,
+          zoomState: {
+            left: null,
+            right: null,
+            refAreaLeft: null,
+            refAreaRight: null,
+            isZooming: false,
+          },
+        }))
 
-      // Generate mock data for all metrics
-      const originalData = generateMockData(indexInput, currentMetrics)
+        const newIndex: SelectedIndex = {
+          name: indexInput,
+          metrics: metricDataObjects,
+        }
 
+        setSelectedIndex(newIndex)
+        setIndexInput("")
+        setCurrentMetrics([])
+        setAddingMetrics(false)
+        console.log("Index and metrics added successfully:", newIndex)
+          // Process the data as needed
+        }).catch((error) => {
+          console.error("Error fetching data:", error)
+        })
+      }
+      else{
+
+        console.log("Using existing data from localStorage",JSON.parse(org_data))
       // Create metric data objects
       const metricDataObjects: MetricData[] = currentMetrics.map((metricId) => ({
         id: metricId,
-        data: originalData,
-        originalData: originalData,
+        data: JSON.parse(org_data),
+        originalData:  JSON.parse(org_data),
         zoomState: {
           left: null,
           right: null,
@@ -308,6 +284,7 @@ export default function IndexMetricExplorer() {
       setIndexInput("")
       setCurrentMetrics([])
       setAddingMetrics(false)
+      }
     } catch (error) {
       console.error("Failed to fetch metrics:", error)
     } finally {
@@ -407,6 +384,7 @@ export default function IndexMetricExplorer() {
   const getAvailableMetrics = () => {
     if (!selectedIndex) return availableMetrics
     const activeMetricIds = selectedIndex.metrics.map((m) => m.id)
+    console.log("from getAvailable metrics",selectedIndex)
     return availableMetrics.filter((metric) => !activeMetricIds.includes(metric.id))
   }
 
@@ -607,8 +585,9 @@ export default function IndexMetricExplorer() {
       )}
 
       <div className="space-y-6">
-        {selectedIndex?.metrics.map((metricData) => (
-          <MetricChart
+        {selectedIndex?.metrics.map((metricData)=>  {
+          return<MetricChart
+            sel_Id={selectedIndex}
             key={metricData.id}
             indexName={selectedIndex.name}
             metricData={metricData}
@@ -616,13 +595,14 @@ export default function IndexMetricExplorer() {
             onDataChange={updateMetricData}
             onRemoveMetric={removeMetric}
           />
-        ))}
+})}
       </div>
     </div>
   )
 }
 
 interface MetricChartProps {
+  sel_Id:SelectedIndex
   indexName: string
   metricData: MetricData
   onZoomStateChange: (metricId: string, zoomState: ZoomState) => void
@@ -631,6 +611,7 @@ interface MetricChartProps {
 }
 
 const MetricChart: React.FC<MetricChartProps> = ({
+  sel_Id,
   indexName,
   metricData,
   onZoomStateChange,
@@ -640,6 +621,11 @@ const MetricChart: React.FC<MetricChartProps> = ({
   const getMetricLabel = (metricId: string) => {
     return availableMetrics.find((m) => m.id === metricId)?.label || metricId
   }
+  console.log("MetricChart rendered for metric:", metricData)
+  console.log("SELID rendered for metric:", sel_Id)
+  useEffect(() => {
+    console.log("metricData updated:", metricData)
+  }, [sel_Id])
 
   const handleMouseDown = useCallback(
     (e: any) => {

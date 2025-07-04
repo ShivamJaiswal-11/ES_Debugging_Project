@@ -1,5 +1,6 @@
 # type: ignore
 import time
+import json
 import subprocess
 from elasticsearch import Elasticsearch
 from fastapi.responses import JSONResponse
@@ -8,13 +9,21 @@ from app.core.es import init_es_client
 from app.core.agent import analyze_with_multi_agent
 from app.core.models import ClusterConfig, NodeRequest
 
-
 router = APIRouter()
+
+headers_gb = {
+    "Accept": "*/*",
+    "Accept-Encoding": "gzip, deflate, br, zstd",
+    "Accept-Language": "en-US,en;q=0.9",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+    "X-Requested-With": "XMLHttpRequest",
+    "Cookie": "SESSION=7989849f-4d4f-4f31-9b7c-511acb1ee05a; SPR_RED_COOKIE=NWY1NDZmMzgtZWM0NS00ZGY0LWFiYWUtNmZhMzkwMDUwZjY2"
+}
+
 
 @router.get("/")
 def root():
     return {"message": "FastAPI initialised successfully"}
-
 
 es_client =  Elasticsearch("http://localhost:9200")  
 # es_client = None  # Initialize as None, will be set later
@@ -42,10 +51,64 @@ async def init_elasticsearch_client(config: ClusterConfig):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/cluster/health")
-def cluster_health():
+@router.get("/cluster-list")
+async def get_cluster_list():
+    url = "https://red.qa6.spr-ops.com/api/v1/esInfo/getnodeSpecificEsInfo"
     try:
-        return es_client.cluster.health()
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            response = await client.get(url, headers=headers_gb)
+            response.raise_for_status()
+            full_data = response.json()
+            cluster_names = [cluster.get("clusterName") for cluster in full_data if "clusterName" in cluster]
+            sorted_cluster_names = sorted(cluster_names, key=lambda x: x.lower())
+            return sorted_cluster_names
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Request failed: {str(e)}")
+
+
+@router.get("/get-direct-es-stats")
+async def get_direct_es_indices(
+    queryField: str = Query(...),
+    host: str = Query(""),
+    clusterName: str = Query(...),
+    call: str = Query(...)
+):
+    base_url = "https://red.qa6.spr-ops.com/api/v1/infrastructure/getDirectESStats"
+
+    params = {
+        "queryField": queryField,
+        "host": host,
+        "clusterName": clusterName,
+        "call": call,
+    }
+    try:
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            response = await client.get(base_url, params=params, headers=headers_gb)
+            response.raise_for_status()
+            return  response.text
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Request failed: {str(e)}")
+
+
+@router.get("/cluster/health")
+async def cluster_health(
+    cluster_name: str = Query(default="false", description="Name of the Elasticsearch cluster")
+):
+    try:
+        if cluster_name.lower() == "false" or cluster_name == "":
+            return es_client.cluster.health()
+        else:
+            base_url="http://127.0.0.1:8000/get-direct-es-stats?queryField=clusterName&host&clusterName=umw1-es&call=_cluster/health"
+            async with httpx.AsyncClient(follow_redirects=True) as client:
+                response = await client.get(base_url, headers=headers_gb)
+                response.raise_for_status()
+                cluster_health = json.loads(response.json())
+                return cluster_health
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -57,16 +120,6 @@ def cluster_stats():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/indices")
-def list_indices():
-    # print("Fetching indices...")
-    try:
-        indices = es_client.indices.get(index="*")
-        # print("Indices fetched successfully")
-        return list(indices.keys())
-    except Exception as e:
-        print(f"Error fetching indices : {e}")
-        raise HTTPException(status_code=500, detail="Indices not found")
 
 @router.post("/index/info")
 def get_index_info(payload: dict):
@@ -80,45 +133,22 @@ def get_index_info(payload: dict):
 
     try:
         stats = es.indices.stats(index=index_name)
-        doc_count = stats["_all"]["primaries"]["docs"]["count"]
-        size_in_bytes = stats["_all"]["primaries"]["store"]["size_in_bytes"]
-        total_indexing = stats["_all"]["primaries"]["indexing"]["index_total"]
-        total_search = stats["_all"]["primaries"]["search"]["query_total"]
-
         cluster_health = es.cluster.health(index=index_name)
-        health_status = cluster_health["status"]
 
         return {
-            "index_name": index_name,
-            "doc_count": doc_count,
-            "size_in_bytes": size_in_bytes,
-            "health_status": health_status,
-            "total_indexing": total_indexing,
-            "total_search": total_search
+            "index": index_name,
+            "docs_count": stats["_all"]["primaries"]["docs"]["count"],
+            "store_size": stats["_all"]["primaries"]["store"]["size_in_bytes"],
+            "health": cluster_health["status"],
+            "indexing_index_total": stats["_all"]["primaries"]["indexing"]["index_total"],
+            "search_query_total": stats["_all"]["primaries"]["search"]["query_total"],
+            "refresh_refresh_total":  stats["_all"]["primaries"]["refresh"]["total"]
         }
 
     except NotFoundError:
         raise HTTPException(status_code=404, detail=f"Index '{index_name}' not found.")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/nodes")
-def get_all_nodes():
-    global es_client
-    try:
-        response = es_client.nodes.info()
-        nodes_info = []
-        for node_id, node in response["nodes"].items():
-            nodes_info.append({
-                "node_id": node_id,
-                "name": node["name"],
-                "host": node["host"],
-                "pid": node["process"]["id"]
-            })
-        return {"nodes": nodes_info}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
 
 def parse_cat_value(value):
     # Converts "1kb", "10mb", "2gb", etc. into integers (bytes)
@@ -136,67 +166,96 @@ def parse_cat_value(value):
     except:
         return 0
 
-@router.get("/top-indices")
-def top_indices(n: int = 3, sort_by: str = Query("docs.count", enum=["docs.count", "store.size", "indexing.index_total", "search.query_total"])):
-    """
-    Fetch top N indices sorted by the given metric.
-    Available sort_by options:
-    - docs.count
-    - store.size
-    - indexing.index_total (requires stats API)
-    - search.query_total (requires stats API)
-    """
+@router.get("/get-top-indices")
+async def get_top_indices(
+    cluster_name: str=Query(default="", description="Name of the Elasticsearch cluster"),
+    top_n: int = Query(default=5, gt=-1),
+    sort_by: str = Query(default="docs_count", enum=["docs_count", "store_size", "indexing_index_total", "refresh_refresh_total", "search_query_total"]),
+):
     try:
-        if sort_by in ["docs.count", "store.size"]:
-            # Use _cat/indices for size and doc count
+        if( cluster_name.lower() == "false" or cluster_name == ""):
             result = es_client.cat.indices(format="json", h=["index", sort_by])
+            midRes=[]
             for r in result:
-                r[sort_by] = parse_cat_value(r.get(sort_by, "0"))
+                dt=get_index_info({"index":str(r['index'])})
+                midRes.append(dt)
+
+            sorted_result = sorted(midRes, key=lambda x: int(x.get(sort_by, 0)), reverse=True)
+            if top_n == 0:
+                return sorted_result                
+            return sorted_result[:top_n]
         else:
-            # Use _stats for metrics like search/indexing rates
-            stats = es_client.indices.stats(metric="indexing,search")
-            result = []
-            for index_name, data in stats["indices"].items():
-                metric_value = 0
-                if sort_by == "indexing.index_total":
-                    metric_value = data.get("total", {}).get("indexing", {}).get("index_total", 0)
-                elif sort_by == "search.query_total":
-                    metric_value = data.get("total", {}).get("search", {}).get("query_total", 0)
-                result.append({"index": index_name, sort_by: metric_value})
+            base_url_=f"https://red.qa6.spr-ops.com/api/v1/infrastructure/getDirectESStats?queryField=clusterName&host=&clusterName={cluster_name}&call=_stats%2Findexing%2Csearch%2Crefresh%2Cdocs%2Cstore%3Flevel%3Dindices%26filter_path%3Dindices.*.primaries.indexing.index_total%2Cindices.*.primaries.search.query_total%2Cindices.*.primaries.refresh.total%2Cindices.*.primaries.docs.count%2Cindices.*.primaries.store.size_in_bytes%2Cindices.*.health"
+            async with httpx.AsyncClient(follow_redirects=True) as client:
+                response = await client.get(base_url_, headers=headers_gb)
+                response.raise_for_status()
+                stats_data = response.json()
+                indices_data = stats_data.get("indices", {})
 
-        sorted_result = sorted(result, key=lambda x: int(x.get(sort_by, 0)), reverse=True)
-        return sorted_result[:n]
-    except (RequestError, TransportError, NotFoundError) as e:
-        raise HTTPException(status_code=500, detail=f"Elasticsearch error: {str(e)}")
+                results = []
+                for index_name, data in indices_data.items():   
+                    health_st= data.get("health", "unknown")
+                    primaries = data.get("primaries", {})
+                    entry = {
+                        "index": index_name,
+                        "docs_count": primaries.get("docs", {}).get("count", 0),
+                        "store_size": primaries.get("store", {}).get("size_in_bytes", 0),
+                        "indexing_index_total": primaries.get("indexing", {}).get("index_total", 0),
+                        "search_query_total": primaries.get("search", {}).get("query_total", 0),
+                        "refresh_refresh_total": primaries.get("refresh", {}).get("total", 0),
+                        "health": health_st
+                    }
+                    results.append(entry)
+                sorted_results = sorted(results, key=lambda x: x.get(sort_by, 0), reverse=True)
+                if top_n == 0:
+                    return sorted_results
+                return sorted_results[:top_n]
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Request failed: {str(e)}")
 
 
-@router.get("/cluster/local-node-pids")
-async def get_local_node_pids():
+@router.get("/nodes")
+async def get_all_nodes(
+    cluster_name: str = Query(default="false", description="Name of the Elasticsearch cluster")
+):
+    # global es_client
     try:
-        # Query the _nodes/process endpoint
-        response = es_client.nodes.info(metric="process")
-        
-        pids_info = []
-        for node_id, node_data in response.get("nodes", {}).items():
-            pids_info.append({
-                "node_name": node_data.get("name"),
-                "host": node_data.get("host"),
-                "pid": node_data.get("process", {}).get("id")
-            })
-        
-        return {"status": "success", "nodes": pids_info}
-    
+        if(cluster_name=="false" or cluster_name==""):
+            response = es_client.nodes.info()
+            nodes_info = []
+            for node_id, node in response["nodes"].items():
+                nodes_info.append({
+                    "node_id": node_id,
+                    "name": node["name"],
+                    "host": node["host"],
+                    "pid": node["process"]["id"]
+                })
+            return nodes_info
+        else:
+            base_url="http://127.0.0.1:8000/get-direct-es-stats?queryField=clusterName&host&clusterName=umw1-es&call=_nodes?filter_path=nodes.*.name,nodes.*.jvm.pid"
+            async with httpx.AsyncClient(follow_redirects=True) as client:
+                response = await client.get(base_url, headers=headers_gb)
+                response.raise_for_status()
+                res=json.loads(response.json())
+                node_list= []
+                for node_id, node_data in res.get("nodes", {}).items():
+                    node_list.append({
+                        "node_id": node_id,
+                        "name": node_data.get("name"),
+                        "pid": node_data.get("jvm", {}).get("pid")
+                    })
+                return node_list
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch node PIDs: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/jstack")
 def run_jstack(pid: int = Query(..., description="PID of the Java process")):
     try:
         result = subprocess.run(
-            ["jstack", "-l", str(pid)],  #Using jcmd instead of jstack for better formatted results
+            ["jstack", "-l", str(pid)], 
             capture_output=True,
             text=True,
             timeout=10
@@ -254,40 +313,77 @@ def jstack_for_agent(pid: int, count: int = 3, interval: int = 1) -> str:
     return "\n\n--- JSTACK SNAPSHOT ---\n\n".join(outputs)
 
 @router.get("/analyze-by-tasks")
-def analyze_tasks():
+async def analyze_tasks(
+    cluster_name: str = Query(default="false", description="Name of the Elasticsearch cluster")
+):
     try:
-        tasks_output = es_client.transport.perform_request("GET", f"/_tasks")
-        analysis = analyze_with_multi_agent(tasks_output, source="tasks")
-        return {"analysis": analysis}
+        if cluster_name.lower() == "false" or cluster_name == "":    
+            tasks_output = es_client.transport.perform_request("GET", f"/_tasks")
+            analysis = analyze_with_multi_agent(tasks_output, source="tasks")
+            return {"analysis": analysis}
+        else:
+            base_url="http://127.0.0.1:8000/get-direct-es-stats?queryField=clusterName&host&clusterName=umw1-es&call=_tasks"
+            async with httpx.AsyncClient(follow_redirects=True) as client:
+                response = await client.get(base_url, headers=headers_gb)
+                response.raise_for_status()
+                tasks_output = json.loads(response.json())
+                # print(tasks_output)
+                # return {"tasks_output": tasks_output}
+                analysis = analyze_with_multi_agent(tasks_output, source="tasks")
+                return {"analysis": analysis}
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
 
 @router.post("/analyze-by-node")
-def analyze_node(request: NodeRequest):
+async def analyze_node(request: NodeRequest):
     try:
-        nodes_info = es_client.nodes.info()
-        pid = None
-        for node_id, node_data in nodes_info["nodes"].items():
-            if node_data["name"] == request.node_name:
-                pid = node_data["process"]["id"]
-                break
-        if pid is None:
-            raise HTTPException(status_code=404, detail="Node not found or missing PID")
-        jstack_output = jstack_for_agent(pid)
-        analysis = analyze_with_multi_agent(jstack_output, source="jstack")
-        return {"analysis": analysis}
+        cluster_name=request.cluster_name
+        if cluster_name.lower() == "false" or cluster_name == "":
+            nodes_info = es_client.nodes.info()
+            pid = None
+            for node_id, node_data in nodes_info["nodes"].items():
+                if node_data["name"] == request.node_name:
+                    pid = node_data["process"]["id"]
+                    break
+            if pid is None:
+                raise HTTPException(status_code=404, detail="Node not found or missing PID")
+            jstack_output = jstack_for_agent(pid)
+            analysis = analyze_with_multi_agent(jstack_output, source="jstack")
+            return {"analysis": analysis}
+        else:
+            base_url="http://127.0.0.1:8000/get-direct-es-stats?queryField=clusterName&host&clusterName=umw1-es&call=_nodes/"+request.node_name+"/jvm"
+            async with httpx.AsyncClient(follow_redirects=True) as client:
+                response = await client.get(base_url, headers=headers_gb)
+                response.raise_for_status()
+                # print(response.json())
+                jstack_output = json.loads(response.json())
+                # print(tasks_output)
+                analysis = analyze_with_multi_agent(jstack_output, source="jstack")
+                return {"analysis": analysis}
+                # analysis = analyze_with_multi_agent(tasks_output, source="tasks")
+                # return {"analysis": analysis}
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
 @router.get("/analyze-hot-threads")
-def analyze_hot_threads():
+def analyze_hot_threads(
+    cluster_name: str = Query(default="false", description="Name of the Elasticsearch cluster"),
+):
     try:
-        result = subprocess.run([
+        result=1
+        if cluster_name.lower() == "false" or cluster_name=="":
+            result = subprocess.run([
             "curl", "-XGET", "http://localhost:9200/_nodes/hot_threads"
-        ], capture_output=True, text=True, check=True)
-        output = result.stdout
-        analysis = analyze_with_multi_agent(output, source="hot_threads")
+                ], capture_output=True, text=True, check=True).stdout
+        else:
+            result = subprocess.run([
+            "curl", "-XGET", "http://127.0.0.1:8000/get-direct-es-stats?queryField=clusterName&host&clusterName=umw1-es&call=_nodes/hot_threads"
+                ], capture_output=True, text=True, check=True).stdout
+        # print(result)
+        analysis = analyze_with_multi_agent(result, source="hot_threads")
         # analysis1= AgentManager({"hot_threads": output})
         return {"analysis": analysis}
     except subprocess.CalledProcessError as e:
@@ -340,11 +436,59 @@ def get_combined_diagnostics():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate diagnostics: {str(e)}")
 
-@router.get("/analyze-by-full-dump")
-def analyze_tasks():
+async def get_combined_diagnostic_output_cluster(cluster_name):
     try:
-        tasks_output = get_combined_diagnostics()
-        analysis = analyze_with_multi_agent(tasks_output, source="jstack + hot_threads + tasks")
+        if cluster_name.lower() == "false" or cluster_name == "":
+            return get_combined_diagnostics()
+        else:
+            output_list = []
+            base_url="http://127.0.0.1:8000/get-direct-es-stats?queryField=clusterName&host&clusterName=umw1-es&call=_tasks"
+            async with httpx.AsyncClient(follow_redirects=True) as client:
+                response = await client.get(base_url, headers=headers_gb)
+                response.raise_for_status()
+                tasks_output = json.loads(response.json())
+                output_list.append(tasks_output[:3000])  # Limit to 3000 characters
+            base_url="http://127.0.0.1:8000/get-direct-es-stats?queryField=clusterName&host&clusterName=umw1-es&call=_nodes/"+request.node_name+"/jvm"
+            async with httpx.AsyncClient(follow_redirects=True) as client:
+                response = await client.get(base_url, headers=headers_gb)
+                response.raise_for_status()
+                jstack_output = json.loads(response.json())
+                output_list.append(jstack_output[:3000])  # Limit to 3000 characters
+            result = subprocess.run(["curl", "-XGET", "http://127.0.0.1:8000/get-direct-es-stats?queryField=clusterName&host&clusterName=umw1-es&call=_nodes/hot_threads"], capture_output=True, text=True, check=True).stdout
+            output_list.append(result[:3000])  # Limit to 3000 characters
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate diagnostics: {str(e)}")
+
+
+
+
+@router.get("/analyze-by-full-dump")
+async def analyze_tasks(
+    cluster_name: str = Query(default="false", description="Name of the Elasticsearch cluster")
+):
+    try:
+        output_list = []
+        if cluster_name.lower() == "false" or cluster_name == "":
+            output_list.append(get_combined_diagnostics())
+        else:
+            base_url="http://127.0.0.1:8000/get-direct-es-stats?queryField=clusterName&host&clusterName=umw1-es&call=_tasks"
+            async with httpx.AsyncClient(follow_redirects=True) as client:
+                response = await client.get(base_url, headers=headers_gb)
+                response.raise_for_status()
+                tasks_output = json.loads(response.json())
+                output_list.append(tasks_output) 
+                base_url="http://127.0.0.1:8000/get-direct-es-stats?queryField=clusterName&host&clusterName=umw1-es&call=_nodes/stats/jvm"
+                response = await client.get(base_url, headers=headers_gb)
+                response.raise_for_status()
+                jstack_output = json.loads(response.json())
+                output_list.append(jstack_output) 
+                base_url="http://127.0.0.1:8000/get-direct-es-stats?queryField=clusterName&host&clusterName=umw1-es&call=_nodes/hot_threads"
+                response = await client.get(base_url, headers=headers_gb)
+                response.raise_for_status()
+                hot_thread_output = response.text
+                output_list.append(hot_thread_output) 
+        analysis = analyze_with_multi_agent(output_list, source="jstack + hot_threads + tasks")
         return {"analysis": analysis}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
@@ -357,7 +501,6 @@ async def monitor_log_query(request: Request):
     query = body.get("query", {"match_all": {}})
 
     try:
-        # Perform the profile query
         response =  es_client.search(
             index=index,
             body={
@@ -365,7 +508,6 @@ async def monitor_log_query(request: Request):
                 "query": query
             }
         )
-
         took = response.get("took", 0)
         timed_out = response.get("timed_out", False)
         shard_info = response.get("_shards", {})
@@ -436,3 +578,115 @@ async def monitor_log_query(request: Request):
 
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+# from fastapi import FastAPI, Request, HTTPException
+from pydantic import BaseModel
+import httpx
+import os
+from datetime import datetime
+
+# app = FastAPI()
+
+GRAFANA_BASE_URL = "https://qa6-influxdb.sprinklr.com"
+GRAFANA_API_TOKEN = os.getenv("GRAFANA_API_TOKEN")  # Replace with actual token for dev
+GRAFANA_ORG_ID = 1  # Replace with your actual org ID
+DATASOURCE_UID = "de290b6f-8217-4837-9ee8-0501e91ac34e"
+DATASOURCE_ID = 17
+
+class QueryInput(BaseModel):
+    from_time: str
+    to_time: str
+    expr: str
+
+
+@router.post("/query/metric")
+async def query_metric(query: QueryInput):
+    # print(f"Received query: {query}")
+    try:
+        headers = {
+            "Authorization": f"Bearer {GRAFANA_API_TOKEN}",
+            "Content-Type": "application/json",
+            "X-Grafana-Org-Id": str(GRAFANA_ORG_ID),
+        }
+
+        payload = {
+            "queries": [
+                {
+                    "refId": "A",
+                    "expr": query.expr,
+                    "fromExploreMetrics": True,
+                    "adhocFilters": [],
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": DATASOURCE_UID
+                    },
+                    "interval": "",
+                    "exemplar": False,
+                    "requestId": "dynamicA",
+                    "utcOffsetSec": 19800,
+                    "scopes": [],
+                    "legendFormat": "",
+                    "datasourceId": DATASOURCE_ID,
+                    "intervalMs": 15000,
+                    "maxDataPoints": 1113
+                }
+            ],
+            "from": query.from_time,
+            "to": query.to_time
+        }
+        # print(f"Querying Grafana with payload: {payload}")
+        url = f"{GRAFANA_BASE_URL}/api/ds/query?ds_type=prometheus&requestId=dynamic_req"
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(url, headers=headers, json=payload)
+
+        response.raise_for_status()
+        data = response.json()
+
+        frames = data["results"].get("A", {}).get("frames", [])
+        if not frames:
+            return []
+
+        timestamps = frames[0]["data"]["values"][0]
+        values = frames[0]["data"]["values"][1]
+
+        result = []
+        for idx, (ts, val) in enumerate(zip(timestamps, values)):
+            result.append({
+                "hour": datetime.utcfromtimestamp(ts / 1000).hour,
+                "index": idx,
+                "refresh_total": val,
+                "timestamp": ts,
+                "timestampStr": datetime.utcfromtimestamp(ts / 1000).isoformat() + "Z"
+            })
+
+        return result
+
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=500, detail=f"Grafana API error: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid request: {str(e)}")
+
+
+@router.post("/query/grafana/prometheus")
+async def query_grafana_prometheus(request: Request):
+    try:
+        data = await request.json()
+
+        headers = {
+            "Authorization": f"Bearer {GRAFANA_API_TOKEN}",
+            "Content-Type": "application/json",
+            "X-Grafana-Org-Id": str(GRAFANA_ORG_ID),
+        }
+
+        url = f"{GRAFANA_BASE_URL}/api/ds/query?ds_type=prometheus&requestId=SQR291"
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(url, headers=headers, json=data)
+
+        response.raise_for_status()
+        return response.json()
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid request: {str(e)}")

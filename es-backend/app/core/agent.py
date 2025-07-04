@@ -112,7 +112,7 @@ combined_diagnostics_agent = Agent(
     "Read all three inputs and identify any critical performance issues, deadlocks, blocking IO, thread starvation, long-running queries, or stuck tasks.",
     "Return Your Answer as : 'summary': [...], 'explanation': '...'",
     "Don't return the <think>...</think> part",
-    "'summary': 4–6 bullet points (start each with •) that capture high-level issues, written for an operations engineer.",
+    "'summary': 4-6 bullet points (start each with •) that capture high-level issues, written for an operations engineer.",
     "'explanation': a well-structured paragraph with details of each finding and suggestions to resolve them. Avoid developer/internal terms.",
     "Ensure you explain what is happening and how it affects performance, e.g., high CPU from hot threads, waiting threads in jstack, or long-running tasks.",
     "Keep output readable and concise. Do not echo the raw inputs. Do not include agent system messages or tool call thoughts."

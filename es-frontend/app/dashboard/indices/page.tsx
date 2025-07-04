@@ -19,46 +19,32 @@ interface IndexInfo {
 
 export default function IndicesExplorer() {
 
+  const router = useRouter()
+  const [loading, setLoading] = useState(false)
+  const [searchTerm, setSearchTerm] = useState("")
   const [indices, setIndices] = useState<IndexInfo[]>([])
   const [filteredIndices, setFilteredIndices] = useState<IndexInfo[]>([])
-  const [searchTerm, setSearchTerm] = useState("")
-  const [loading, setLoading] = useState(false)
-  const router = useRouter()
 
   const fetchIndices = async () => {
     setLoading(true)
+    const selectedCluster = localStorage.getItem("SelectedClusterName")
       axios
-      .get<string[]>("http://127.0.0.1:8000/indices")
-      .then(async (res) => {
+      .get(`http://127.0.0.1:8000/get-top-indices?cluster_name=${selectedCluster}&top_n=0`)
+      .then((res) => {
         const indexNames = res.data
-          const indexInfoResponses= await Promise.all(indexNames.map((index) =>
-            axios
-              .post("http://127.0.0.1:8000/index/info", {
-                index: index,
-              })
-              .then((response) => {
-                const info: IndexInfo = {
-                  name: response.data.index_name,
-                  docCount: response.data.doc_count,
-                  size: `${response.data.size_in_bytes} bytes`,
-                  health: response.data.health_status,
+          const indexInfoResponses= indexNames.map((indexx:any) =>{
+                const info: IndexInfo =
+                 {
+                    name: indexx.index,
+                    health: indexx.health,
+                    size: indexx.store_size,
+                    docCount: indexx.docs_count,
                 }
-                // console.log(info)
                 return info
-              })
-              .catch((error) => {
-                // console.error(`Error fetching info for index ${index}:`, error)
-                toast.error(`Failed to fetch info for index ${index}.`)
-                return null
-              })
+              }
           )
-        )
-          // console.log(indexInfoResponses)
-        const validInfo = indexInfoResponses.filter(
-          (info): info is IndexInfo => info !== null
-        )
-        setIndices(validInfo)
-        localStorage.setItem("Indices_list", JSON.stringify(validInfo));
+        setIndices(indexInfoResponses)
+        localStorage.setItem("Indices_list", JSON.stringify(indexInfoResponses));
       })
       .catch((err) =>
         {
@@ -86,7 +72,6 @@ export default function IndicesExplorer() {
           setIndices(parsedIndices)
         }
       }
-
       fetchIndices()
     }
   }, [router])
@@ -107,11 +92,6 @@ export default function IndicesExplorer() {
       default:
         return "outline"
     }
-  }
-
-  const handleQueryMonitor = (indexName: string) => {
-    // Navigate to query monitor with pre-filled index
-    window.location.href = `/dashboard/monitor?index=${indexName}`
   }
 
   return (

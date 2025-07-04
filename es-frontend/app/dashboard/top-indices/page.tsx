@@ -17,96 +17,99 @@ interface IndexInfo {
   docCount: number
   indexingCount : number
   searchCount : number
+  refreshCount: number
   size: string
   health: "green" | "yellow" | "red"
 }
-interface Sorted_index {
-  index: string
-  metric: number
+
+interface IndexInfo_ {
+  index : string
+  docs_count : number
+  store_size : number
+  indexing_index_total : number
+  search_query_total : number
+  refresh_refresh_total : number
+  health : "green" | "yellow" | "red"
+
 }
 
 const optionLists = [
    {
-    value:"docs.count",
+    value:"docs_count",
     label:"Docs Count"
   },
   {
-    value:"store.size",
+    value:"store_size",
     label:"Size stored"
   },
   {
-    value:"indexing.index_total",
+    value:"indexing_index_total",
     label:"Total indexing"
   },
   {
-    value:"search.query_total",
+    value:"refresh_refresh_total",
+    label:"Total refresh"
+  },
+  {
+    value:"search_query_total",
     label:"Total search query"
   },
- 
 ]
 export default function TopIndices() {
+  const router = useRouter()
+  const [n_val,setN_val]=useState("0")    
+  const [sortBy,setSortBy]=useState("")
+  const [loading, setLoading] = useState(false)
+  const [searchTerm, setSearchTerm] = useState("")
+  const [fdisabled, setFdisabled] = useState(false)
   const [indices, setIndices] = useState<IndexInfo[]>([])
   const [indicesList, setIndicesList] = useState<string[]>([])
   const [topNIndicesList, setTopNIndicesList] = useState<string[]>([])
   const [filteredIndices, setFilteredIndices] = useState<IndexInfo[]>([])
-  const [searchTerm, setSearchTerm] = useState("")
-  const [loading, setLoading] = useState(false)
-  const [fdisabled, setFdisabled] = useState(false)
-  const router = useRouter()
-  const [n_val,setN_val]=useState("")    
-  const [sortBy,setSortBy]=useState("")
 
   const fetchIndices = async () => {
-    setLoading(true)
-    axios
-    .get<string[]>("http://127.0.0.1:8000/indices")
-    .then(async (res) => {
-      const indexNames = res.data
-      setIndicesList(indexNames)
-      localStorage.setItem("indices_list", JSON.stringify(indexNames))
-      // console.log(res.data)
-        const indexInfoResponses= await Promise.all(indexNames.map((index) =>
-          axios
-            .post("http://127.0.0.1:8000/index/info", {
-              index: index,
-            })
-            .then((response) => {
-              const info: IndexInfo = {
-                name: response.data.index_name,
-                docCount: response.data.doc_count,
-                size: `${response.data.size_in_bytes} bytes`,
-                health: response.data.health_status,
-                indexingCount: response.data.total_indexing ,
-                searchCount: response.data.total_search 
-              }
-              // console.log(info)
-              return info
-            })
-            .catch((error) => {
-              console.error(`Error fetching info for index ${index}:`, error)
-              return null
-            })
+    const clusterName = localStorage.getItem("SelectedClusterName")
+      setLoading(true)
+      axios
+      .get<IndexInfo_[]>(`http://127.0.0.1:8000/get-top-indices?cluster_name=${clusterName}&top_n=${n_val}`)
+      .then( (res) => {
+        const indexNames = res.data
+          const indexInfoResponses= (indexNames.map((index) =>
+          {
+            const info: IndexInfo = {
+              name: index.index,
+              docCount: index.docs_count,
+              size: `${index.store_size} bytes`,
+              health: index.health,
+              indexingCount: index.indexing_index_total ,
+              searchCount: index.search_query_total ,
+              refreshCount: index. refresh_refresh_total
+            }
+            // console.log(info)
+            return info
+          }
+          )
         )
-      )
-      const validInfo = indexInfoResponses.filter(
-        (info): info is IndexInfo => info !== null
-      )
-      setIndices(validInfo)
-      localStorage.setItem("filtered_indices_list", JSON.stringify(validInfo));
-      toast.success("Indices fetched successfully!")
-      // console.log("Fetched Indices:", validInfo)
-    })
-    .catch((err) => 
-      {
-        // console.error("Error fetching indices list:", err)
-        toast.error("Error fetching indices list. Please try again later.")
+        const validInfo = indexInfoResponses.filter(
+          (info): info is IndexInfo => info !== null
+        )
+        setIndices(validInfo)
+        localStorage.setItem("filtered_indices_list", JSON.stringify(validInfo));
+        toast.success("Indices fetched successfully!")
+        // console.log("Fetched Indices:", validInfo)
       })
-    .finally (() => {
-        setTimeout(() => {
-          setLoading(false)
-        }, 100)
-      }
-    )
+      .catch((err) => 
+        {
+          // console.error("Error fetching indices list:", err)
+          toast.error("Error fetching indices list. Please try again later.")
+        })
+      .finally (() => {
+          setTimeout(() => {
+            setLoading(false)
+          }, 100)
+        }
+      )
+    // }
   }
 
   useEffect(() => {
@@ -128,7 +131,7 @@ export default function TopIndices() {
         const parsedIndices = JSON.parse(filtered_indices_lst) as IndexInfo[]
         if (parsedIndices.length > 0) {
           setIndices(parsedIndices)
-          console.log("Using stored indices:", parsedIndices)
+          // console.log("Using stored indices:", parsedIndices)
         }
       } else {
         fetchIndices()
@@ -176,55 +179,47 @@ export default function TopIndices() {
     }
     localStorage.setItem("N_val", n_val_num.toString())
     localStorage.setItem("SortBy", sortBy)
-    axios
-    .get<Sorted_index[]>(`http://127.0.0.1:8000/top-indices?n=${n_val_num}&sort_by=${sortBy}`)
-    .then(async (res) => {
-      const indexNames = res.data
-      setTopNIndicesList(indexNames.map((index_data) => index_data.index))
-      localStorage.setItem("top_n_indices_list", JSON.stringify(indexNames.map((index_data) => index_data.index)))
-      // console.log("Top N Indices:", indexNames)
-      console.log(res.data)
-        const indexInfoResponses= await Promise.all(indexNames.map((index_data) =>
-          axios
-            .post("http://127.0.0.1:8000/index/info", {
-              index: index_data.index,
-            })
-            .then((response) => {
-              const info: IndexInfo = {
-                name: response.data.index_name,
-                docCount: response.data.doc_count,
-                size: `${response.data.size_in_bytes} bytes`,
-                health: response.data.health_status,
-                indexingCount: response.data.total_indexing,
-                searchCount: response.data.total_search
-              }
-              // console.log(info)
-              return info
-            })
-            .catch((error) => {
-              console.error(`Error fetching info for index ${index_data.index}:`, error)
-              return null
-            })
+    const clusterName = localStorage.getItem("SelectedClusterName")
+      axios
+      .get<IndexInfo_[]>(`http://127.0.0.1:8000/get-top-indices?cluster_name=${clusterName}&top_n=${n_val}&sort_by=${sortBy}`)
+      .then( (res) => {
+        const indexNames = res.data
+          const indexInfoResponses= (indexNames.map((index) =>
+          {
+            const info: IndexInfo = {
+              name: index.index,
+              docCount: index.docs_count,
+              size: `${index.store_size} bytes`,
+              health: index.health,
+              indexingCount: index.indexing_index_total ,
+              searchCount: index.search_query_total ,
+              refreshCount: index. refresh_refresh_total
+            }
+            // console.log(info)
+            return info
+          }
+          )
         )
-      )
-      const validInfo = indexInfoResponses.filter(
-        (info): info is IndexInfo => info !== null
-      )
-      setIndices(validInfo)
-      // console.log("Filtered Indices:", validInfo)
-      toast.success("Indices filtered successfully!")
-      localStorage.setItem("filtered_indices_list", JSON.stringify(validInfo));
-    })
-    .catch((err) => 
-      {
-        // console.error("Error fetching indices list:", err)
-        toast.error("Error fetching indices list.")
+        const validInfo = indexInfoResponses.filter(
+          (info): info is IndexInfo => info !== null
+        )
+        setIndices(validInfo)
+        localStorage.setItem("filtered_indices_list", JSON.stringify(validInfo));
+        toast.success("Indices fetched successfully!")
+        // console.log("Fetched Indices:", validInfo)
       })
-    .finally(() => {
-      setTimeout(() => {
-        setFdisabled(false)
-      }, 100)
-    })
+      .catch((err) => 
+        {
+          // console.error("Error fetching indices list:", err)
+          toast.error("Error fetching indices list. Please try again later.")
+        })
+      .finally (() => {
+          setTimeout(() => {
+            setFdisabled(false)
+          }, 100)
+        }
+      )
+    // }
   }
 
   return (
@@ -307,6 +302,7 @@ export default function TopIndices() {
                 <TableHead>Document Count</TableHead>
                 <TableHead>Indexing Count</TableHead>
                 <TableHead>Search Count</TableHead>
+                <TableHead>Refresh Count</TableHead>
                 <TableHead>Size</TableHead>
                 <TableHead>Health</TableHead>
               </TableRow>
@@ -318,6 +314,7 @@ export default function TopIndices() {
                   <TableCell>{index.docCount.toLocaleString()}</TableCell>
                   <TableCell>{index.indexingCount.toLocaleString()}</TableCell>
                   <TableCell>{index.searchCount.toLocaleString()}</TableCell>
+                  <TableCell>{index.refreshCount.toLocaleString()}</TableCell>
                   <TableCell>{index.size}</TableCell>
                   <TableCell>
                     <Badge variant={getHealthVariant(index.health)}>{index.health}</Badge>

@@ -18,37 +18,37 @@ export default function JStackDiagnostics() {
   const [nodes, setNodes] = useState<NodeInfo[]>([])
   const [analysis, setAnalysis] = useState("")
   const [loading, setLoading] = useState(false)
-  // const [rloading, setRLoading] = useState(false)
   const router = useRouter()
+
   const fetchNodes = async () => {
+    const clusterName = localStorage.getItem("SelectedClusterName")
     setLoading(true)
-      axios
-      .get("http://127.0.0.1:8000/nodes")
-      .then(async (res) => {
-        const nodeNames = res.data.nodes
-        // console.log(res.data)
-          const NodeInfoResponses= nodeNames.map((nodes:any) =>{
-            const info: NodeInfo = {
-              name: nodes.name,
-              node_id: nodes.node_id,
-              pid: nodes.pid,
-            }
-            return info
-          })
-          setNodes(NodeInfoResponses)
-          localStorage.setItem("filtered_Nodes_list", JSON.stringify(NodeInfoResponses))
-      })
-      .catch((err) => {
-        // console.error("Error fetching indices list:", err)
-        toast.error("Failed to fetch nodes. Please try again.")
-      })
-      .finally(() => {
-        setTimeout(() => {
-          setLoading(false)
-        }, 100) // Simulate a delay for loading state
-      })
-    }
-  
+    axios
+    .get("http://127.0.0.1:8000/nodes?cluster_name="+clusterName)
+    .then(async (res) => {
+      const nodeNames = res.data
+      // console.log(res.data)
+        const NodeInfoResponses= nodeNames.map((nodes:any) =>{
+          const info: NodeInfo = {
+            name: nodes.name,
+            node_id: nodes.node_id,
+            pid: nodes.pid,
+          }
+          return info
+        })
+        setNodes(NodeInfoResponses)
+        localStorage.setItem("filtered_Nodes_list", JSON.stringify(NodeInfoResponses))
+    })
+    .catch((err) => {
+      // console.error("Error fetching indices list:", err)
+      toast.error("Failed to fetch nodes. Please try again.")
+    })
+    .finally(() => {
+      setTimeout(() => {
+        setLoading(false)
+      }, 100)
+    })
+  }
   
   useEffect(() => {
     const clusterInit = localStorage.getItem("ClusterInit")
@@ -67,11 +67,13 @@ export default function JStackDiagnostics() {
       }
     }
   }, [router])
+
   const onClickRunHotThread = async () => {
     setAnalysis("") 
+    const clusterName=localStorage.getItem("SelectedClusterName")
     toast.loading("Analyzing hot threads Output...")
     setLoading(true)
-    axios.get("http://127.0.0.1:8000/analyze-hot-threads")
+    axios.get(`http://127.0.0.1:8000/analyze-hot-threads?cluster_name=${clusterName}`)
     .then((res) => {
       const hotThreads = res.data.analysis
       setAnalysis(hotThreads)
@@ -85,15 +87,18 @@ export default function JStackDiagnostics() {
       setLoading(false)
       toast.dismiss()
     })
+    // }
   }
+
   const onClickRunFullAnalysis = async () => {
+    const clusterName = localStorage.getItem("SelectedClusterName")
     setAnalysis("") 
     toast.loading("Analyzing all outputs...")
     setLoading(true)
-    axios.get("http://127.0.0.1:8000/analyze-by-full-dump")
+    axios.get("http://127.0.0.1:8000/analyze-by-full-dump?cluster_name="+clusterName)
     .then((res) => {
-      const hotThreads = res.data.analysis
-      setAnalysis(hotThreads)
+      const fullDumpAnalysis = res.data.analysis
+      setAnalysis(fullDumpAnalysis)
       toast.dismiss()
       toast.success("Analysis completed.")
       setLoading(false)
@@ -121,12 +126,14 @@ export default function JStackDiagnostics() {
       copyToClipboard()
     }
   }
+
   const handleDiagnose = (indexName: string) => {
+    const clusterName = localStorage.getItem("SelectedClusterName")
     setAnalysis("") 
     setLoading(true)
     toast.loading("Analyzing JStack Output...")
     axios
-      .post("http://127.0.0.1:8000/analyze-by-node", { node_name: indexName })
+      .post("http://127.0.0.1:8000/analyze-by-node", { node_name: indexName , cluster_name: clusterName })
       .then((res) => {
         setAnalysis(res.data.analysis)
         toast.dismiss()
@@ -143,11 +150,12 @@ export default function JStackDiagnostics() {
     )
   }
   const handleAnalyze = () => {
+    const clusterName = localStorage.getItem("SelectedClusterName")
     setAnalysis("") 
     setLoading(true)
     toast.loading("Analyzing Running Tasks...")
     axios
-      .get("http://127.0.0.1:8000/analyze-by-tasks")
+      .get("http://127.0.0.1:8000/analyze-by-tasks?cluster_name="+clusterName)
       .then((res) => {
         setAnalysis(res.data.analysis)
         toast.dismiss()

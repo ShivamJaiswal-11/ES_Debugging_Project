@@ -8,3 +8,4 @@ class ClusterConfig(BaseModel):
 
 class NodeRequest(BaseModel):
     node_name: str
+    cluster_name:str

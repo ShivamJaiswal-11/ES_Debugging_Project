@@ -16,45 +16,46 @@ interface ClusterHealth {
   active_primary_shards: number
   active_shards: number
   unassigned_shards: number
-  uptime: string
+  pending_tasks: string
 }
 
 export default function ClusterOverview() {
   const router = useRouter()
-  const [clusterHealth, setClusterHealth] = useState<ClusterHealth | null>(null)
   const [loading, setLoading] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [clusterHealth, setClusterHealth] = useState<ClusterHealth | null>(null)
   
-
   const fetchClusterHealth = async () => {
     setLoading(true)
-    axios
-      .get("http://127.0.0.1:8000/cluster/health")
-      .then((response) => {
-        const data = response.data
-        // console.log(data)
-        const health: ClusterHealth = {
-          status: data.status,
-          cluster_name: data.cluster_name,
-          number_of_nodes: data.number_of_nodes,
-          number_of_data_nodes: data.number_of_data_nodes,
-          active_primary_shards: data.active_primary_shards,
-          active_shards: data.active_shards,
-          unassigned_shards: data.unassigned_shards,
-          uptime: "N/A", 
-        }
-        setLastUpdated(new Date())
-        setClusterHealth(health)
-      })
-      .catch((error) => {
-        // console.error("Error fetching cluster health:", error)
-        toast.error("Failed to fetch cluster health.")
-      })
-      .finally(() => {
-        setTimeout(() => {
-          setLoading(false)
-        }, 100) 
-      })
+    const selectedCluster = localStorage.getItem("SelectedClusterName")
+    // console.log("Selected Cluster:", selectedCluster)
+      axios
+        .get("http://127.0.0.1:8000/cluster/health?cluster_name=" + selectedCluster)
+        .then((response) => {
+          const data = response.data
+          // console.log(data)
+          const health: ClusterHealth = {
+            status: data.status,
+            cluster_name: data.cluster_name,
+            number_of_nodes: data.number_of_nodes,
+            number_of_data_nodes: data.number_of_data_nodes,
+            active_primary_shards: data.active_primary_shards,
+            active_shards: data.active_shards,
+            unassigned_shards: data.unassigned_shards,
+            pending_tasks: data.number_of_pending_tasks,
+          }
+          setLastUpdated(new Date())
+          setClusterHealth(health)
+        })
+        .catch((error) => {
+          // console.error("Error fetching cluster health:", error)
+          toast.error("Failed to fetch cluster health.")
+        })
+        .finally(() => {
+          setTimeout(() => {
+            setLoading(false)
+          }, 100) 
+        })
   }
 
   useEffect(() => {
@@ -160,14 +161,14 @@ export default function ClusterOverview() {
       <Card>
         <CardHeader>
           <CardTitle>Cluster Information</CardTitle>
-          <CardDescription>Additional cluster details and uptime information</CardDescription>
+          <CardDescription>Additional cluster details and pending tasks information</CardDescription>
         </CardHeader>
         <CardContent>
           {clusterHealth && (
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <h4 className="font-medium mb-2">Uptime</h4>
-                <p className="text-2xl font-bold text-green-600">{clusterHealth.uptime}</p>
+                <h4 className="font-medium mb-2">Pending Tasks</h4>
+                <p className="text-2xl font-bold text-green-600">{clusterHealth.pending_tasks}</p>
               </div>
               <div>
                 <h4 className="font-medium mb-2">Cluster Name</h4>
