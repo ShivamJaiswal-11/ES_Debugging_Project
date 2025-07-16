@@ -9,21 +9,23 @@ from datetime import datetime
 from typing import List, Dict
 from dotenv import load_dotenv
 from fastapi import APIRouter, HTTPException, Query
-from app.core.models import QueryInput,ChatMessage,ts_init,ChatMessagee
+from app.core.models import QueryInput,ChatMessage,ts_init,ChatMessageTool
 
-load_dotenv()
+
 router = APIRouter()
 
+load_dotenv()
+OPENAI_URL = os.getenv("OPENAI_URL")
+RED_API_TOKEN = os.getenv("RED_API_TOKEN")  
+DATASOURCE_ID = os.getenv("DATASOURCE_ID")  
+DATASOURCE_UID = os.getenv("DATASOURCE_UID")  
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+GRAFANA_ORG_ID = os.getenv("GRAFANA_ORG_ID")  
 GRAFANA_BASE_URL = os.getenv("GRAFANA_BASE_URL") 
 GRAFANA_API_TOKEN = os.getenv("GRAFANA_API_TOKEN") 
-GRAFANA_ORG_ID = os.getenv("GRAFANA_ORG_ID")  
-DATASOURCE_UID = os.getenv("DATASOURCE_UID")  
-DATASOURCE_ID = os.getenv("DATASOURCE_ID")  
-RED_API_TOKEN = os.getenv("RED_API_TOKEN")  
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_URL = os.getenv("OPENAI_URL")
 
-headers_gb = {
+
+headers_red = {
     "X-RED-API-TOKEN": RED_API_TOKEN,
     "Accept": "*/*",
     "Accept-Encoding": "gzip, deflate, br, zstd",
@@ -39,7 +41,7 @@ headers_llm = {
     "workspace_id": "66000002"
 }
 
-headers = [
+headers_curl = [
     "-H", f"X-RED-API-TOKEN: {RED_API_TOKEN}",
     "-H", "Accept: application/json",
     "-H", "X-Requested-With: XMLHttpRequest"
@@ -51,12 +53,12 @@ def root():
     return {"message": "FastAPI initialised successfully"}
 
 
-@router.get("/cluster-list")
+@router.get("/get-cluster-list")
 async def get_cluster_list():
     url = "https://qa6-red-api.sprinklr.com/internal-cross/api/v1/getnodeSpecificEsInfo"
     try:
         async with httpx.AsyncClient(follow_redirects=True) as client:
-            response = await client.get(url, headers=headers_gb)
+            response = await client.get(url, headers=headers_red)
             response.raise_for_status()
             full_data = response.json()
             response_data = []
@@ -72,8 +74,8 @@ async def get_cluster_list():
         raise HTTPException(status_code=500, detail=f"Request failed: {str(e)}")
 
 
-@router.get("/get-direct-es-stats")
-async def get_direct_es_indices(
+@router.get("/get-red-api")
+async def get_red_api(
     queryField: str = Query(""),
     host: str = Query(""),
     call: str = Query("")
@@ -86,7 +88,7 @@ async def get_direct_es_indices(
     }
     try:
         async with httpx.AsyncClient(follow_redirects=True) as client:
-            response = await client.get(base_url,params=params, headers=headers_gb)
+            response = await client.get(base_url,params=params, headers=headers_red)
             response.raise_for_status()
             return  response.text
     except httpx.HTTPStatusError as e:
@@ -95,12 +97,12 @@ async def get_direct_es_indices(
         raise HTTPException(status_code=500, detail=f"Request failed: {str(e)}")
 
 
-@router.get("/cluster/health")
-async def cluster_health(
+@router.get("/get-cluster-health")
+async def get_cluster_health(
     cluster_name: str = Query(default="false", description="Name of the Elasticsearch cluster")
 ):
     try:
-        base_url=f"http://127.0.0.1:8000/get-direct-es-stats?queryField=clusterName&host={cluster_name}&call=_cluster/health"
+        base_url=f"http://127.0.0.1:8000/get-red-api?queryField=clusterName&host={cluster_name}&call=_cluster/health"
         async with httpx.AsyncClient(follow_redirects=True) as client:
             response = await client.get(base_url)
             response.raise_for_status()
@@ -134,7 +136,7 @@ async def get_top_indices(
     try:
         base_url_=f"https://qa6-red-api.sprinklr.com/internal-cross/api/v1/getDirectESStats?queryField=clusterName&host={cluster_name}&call=_stats%2Findexing%2Csearch%2Crefresh%2Cdocs%2Cstore%3Flevel%3Dindices%26filter_path%3Dindices.*.primaries.indexing.index_total%2Cindices.*.primaries.search.query_total%2Cindices.*.primaries.refresh.total%2Cindices.*.primaries.docs.count%2Cindices.*.primaries.store.size_in_bytes%2Cindices.*.health"
         async with httpx.AsyncClient(follow_redirects=True) as client:
-            response = await client.get(base_url_, headers=headers_gb)
+            response = await client.get(base_url_, headers=headers_red)
             response.raise_for_status()
             stats_data = response.json()
             indices_data = stats_data.get("indices", {})
@@ -163,14 +165,14 @@ async def get_top_indices(
         raise HTTPException(status_code=500, detail=f"Request failed: {str(e)}")
 
 
-@router.get("/nodes")
+@router.get("/get-nodes")
 async def get_all_nodes(
     cluster_name: str = Query(default="false", description="Name of the Elasticsearch cluster")
 ):
     try:
-        base_url=f"http://127.0.0.1:8000/get-direct-es-stats?queryField=clusterName&host={cluster_name}&call=_nodes?filter_path=nodes.*.name,nodes.*.jvm.pid"
+        base_url=f"http://127.0.0.1:8000/get-red-api?queryField=clusterName&host={cluster_name}&call=_nodes?filter_path=nodes.*.name,nodes.*.jvm.pid"
         async with httpx.AsyncClient(follow_redirects=True) as client:
-            response = await client.get(base_url, headers=headers_gb)
+            response = await client.get(base_url, headers=headers_red)
             response.raise_for_status()
             res=json.loads(response.json())
             node_list= []
@@ -209,14 +211,14 @@ def genPayload(prompt):
     return payload_d
 
 @router.get("/analyze-by-tasks")
-async def analyze_tasks(
+async def analyze_by_tasks(
     cluster_name: str = Query(default="false", description="Name of the Elasticsearch cluster"),
     node_name: str = Query(default="", description="Name of the Elasticsearch node")
 ):
     try:
         result = subprocess.run([
         "curl", "-XGET", f"https://qa6-red-api.sprinklr.com/internal-cross/api/v1/getDirectESStats?queryField=host&host={cluster_name}&clusterName=&call=_tasks?nodes={node_name}"
-            ]+headers, capture_output=True, text=True, check=True).stdout
+            ]+headers_curl, capture_output=True, text=True, check=True).stdout
         url = OPENAI_URL
         prompt_TK=f"You are an expert in Elasticsearch performance. Analyze the GET /_tasks output and provide a clear, customer-facing summary. Your response should: List each node and summarize its running tasks. For each task: Explain its purpose based on the action field. Classify the task (e.g., search, indexing, monitoring, geoip). Flag long-running, cancellable, or failed tasks. Highlight parent-child relationships and distributed chains. Identify patterns or anomalies (e.g., task spikes, delays). Recommend actions if needed (e.g., cancel tasks, tune workloads). Format the output cleanly by node and task. The task data is: {result}"
         payload_TK= genPayload(prompt_TK)
@@ -234,15 +236,15 @@ async def analyze_tasks(
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
 
-@router.get("/analyze-by-node")
-async def analyze_node(
+@router.get("/analyze-by-jvm")
+async def analyze_by_jvm(
     cluster_name: str = Query(default="false", description="Name of the Elasticsearch cluster"),
     node_name: str = Query(default="", description="Name of the Elasticsearch node")
 ):
     try:
         result = subprocess.run([
             "curl", "-XGET", f"https://qa6-red-api.sprinklr.com/internal-cross/api/v1/getDirectESStats?queryField=host&host={cluster_name}&clusterName=&call=_nodes/"+node_name+"/jvm"
-        ]+headers, capture_output=True, text=True, check=True).stdout
+        ]+headers_curl, capture_output=True, text=True, check=True).stdout
         # return result
         url = OPENAI_URL
         prompt_JVM=f"You are an expert in Elasticsearch JVM performance diagnostics. Analyze the output from the /_nodes/jvm API and provide a structured, customer-ready summary. For each node, include: Node name and IP. Heap memory usage: compare heap_init, heap_max, and current usage. Note if usage is close to heap_max. GC activity: list GC collectors and comment on whether GC activity seems high or abnormal. JVM arguments: highlight any notable tuning flags (e.g. GC configs, heap settings). Memory pools: identify pressure in areas like Eden, Survivor, or Old Gen. Java version, VM vendor, and bundled JDK usage. Call out potential performance issues (e.g., heap pressure, frequent GCs, inadequate JVM tuning) and suggest improvements if any. Organize the output node-wise using bullet points or sections. The jvm stats is: {result}"
@@ -269,7 +271,7 @@ async def analyze_hot_threads(
     try:
         result = subprocess.run([
         "curl", "-XGET", f"https://qa6-red-api.sprinklr.com/internal-cross/api/v1/getDirectESStats?queryField=host&host={cluster_name}&clusterName=&call=_nodes%2F{node_name}%2Fhot_threads%3Fthreads%3D3%26interval%3D3s%26snapshots%3D10%26ignore_idle_threads%3Dfalse"
-            ]+headers, capture_output=True, text=True, check=True).stdout
+            ]+headers_curl, capture_output=True, text=True, check=True).stdout
         url = OPENAI_URL
         prompt_HT=f"You are an expert in Elasticsearch performance analysis. Analyze the output from the _nodes/hot_threads API and provide a clear, customer-ready summary. Your response should: Identify each node and summarize its hot threads individually. For each thread, explain what it is doing based on the stack trace and highlight any blocking, repetitive, or unusual activity. Classify thread activity (e.g., garbage collection, search, indexing). Note any idle or sleeping threads. Highlight system-wide patterns or anomalies. Recommend mitigations if applicable (e.g., tuning, query optimization, heap issues). Present the findings in a clear, structured format—by node and by thread. Do not skip any thread. The hot threads output is :  {result}"
         payload_HT= genPayload(prompt_HT)
@@ -288,34 +290,34 @@ async def analyze_hot_threads(
         raise HTTPException(status_code=500, detail=f"hot_threads failed: {e.stderr}")
 
 
-def get_combined_diagnostic_output_cluster(cluster_name):
+def get_full_dump_output(cluster_name):
     try:
         output_list = []
         output_list.append("tasks_output:")
         result = subprocess.run([
         "curl", "-XGET", f"https://qa6-red-api.sprinklr.com/internal-cross/api/v1/getDirectESStats?queryField=host&host={cluster_name}&clusterName=&call=_tasks"
-            ]+headers, capture_output=True, text=True, check=True).stdout
+            ]+headers_curl, capture_output=True, text=True, check=True).stdout
         output_list.append(result) 
         output_list.append("JVM_output:")
         result = subprocess.run([
             "curl", "-XGET", f"https://qa6-red-api.sprinklr.com/internal-cross/api/v1/getDirectESStats?queryField=host&host={cluster_name}&clusterName=&call=_nodes/jvm"
-        ]+headers, capture_output=True, text=True, check=True).stdout
+        ]+headers_curl, capture_output=True, text=True, check=True).stdout
         output_list.append(result) 
         output_list.append("Hot_thread_output:")
         result = subprocess.run([
         "curl", "-XGET", f"https://qa6-red-api.sprinklr.com/internal-cross/api/v1/getDirectESStats?queryField=host&host={cluster_name}&clusterName=&call=_nodes%2Fhot_threads%3Fthreads%3D3%26interval%3D3s%26snapshots%3D10%26ignore_idle_threads%3Dfalse"
-            ]+headers, capture_output=True, text=True, check=True).stdout
+            ]+headers_curl, capture_output=True, text=True, check=True).stdout
         output_list.append(result)
         return output_list
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate diagnostics: {str(e)}")
 
 @router.get("/analyze-by-full-dump")
-async def analyze_tasks(
+async def analyze_by_full_dump(
     cluster_name: str = Query(default="false", description="Name of the Elasticsearch cluster")
 ):
     try:
-        output_list = get_combined_diagnostic_output_cluster(cluster_name)
+        output_list = get_full_dump_output(cluster_name)
         url = OPENAI_URL
         prompt_FULL=f"You are an expert in Elasticsearch performance diagnostics. You will be provided with combined outputs from the following APIs: /_tasks: for all running or queued cluster tasks. /_nodes/hot_threads: to detect thread contention or blocking. /_nodes/jvm: for JVM memory and GC analysis. Your goal is to: Analyze each output to identify any performance bottlenecks, unusual behavior, or system health risks. Summarize overall health clearly (e.g., “System healthy” or “Performance issues found”). If issues exist, explain root causes (e.g., excessive GC, blocked threads, long-running tasks). Suggest specific remediation steps (e.g., tune JVM flags, optimize queries, rebalance nodes). Keep the response structured, professional, and understandable by operations teams. Do not quote back large portions of the input. Instead, explain insights derived from it. The combined outputs follow: {output_list}"
         payload_FULL= genPayload(prompt_FULL)
@@ -504,19 +506,20 @@ class ChatContext:
         return self.history
     
 
-
+shared_context_stats = ChatContext()
 @router.get("/chat/init-stats-debug") 
-async def initialize_debug_context(
+async def init_stats_debug_context(
     cluster_name: str = Query(default="false", description="Name of the Elasticsearch cluster")
 ):
-    debug_data=get_combined_diagnostic_output_cluster(cluster_name)
+    debug_data=get_full_dump_output(cluster_name)
     debug_input = str(debug_data)
-    shared_context.set_initial_debug_stats_context(debug_input)
+    shared_context_stats.set_initial_debug_stats_context(debug_input)
     return {"status": "Chatbot initialised successfully!"}
 
 
+shared_context_ts = ChatContext()
 @router.post("/chat/init-ts-debug")
-async def initialize_debug_context(arg : ts_init):
+async def init_ts_debug_context(arg : ts_init):
     extracted_third_values = []
     for item in arg.data:
         if len(item) >= 3:
@@ -524,18 +527,16 @@ async def initialize_debug_context(arg : ts_init):
             third_value = item[third_key]
             extracted_third_values.append({third_key: third_value})
 
-    shared_context1.set_initial_debug_ts_context(extracted_third_values)
+    shared_context_ts.set_initial_debug_ts_context(extracted_third_values)
     return {"status": "Chatbot initialised successfully!"}
 
-shared_context = ChatContext()
-shared_context1 = ChatContext()
 
 @router.post("/chat/send")
 async def send_chat_message(msg: ChatMessage):
     fl=msg.metric
     usCont=1
-    if(fl=="false"):usCont=shared_context
-    else:usCont=shared_context1
+    if(fl=="false"):usCont=shared_context_stats
+    else:usCont=shared_context_ts
     usCont.add_user_message(msg.message)
     url = OPENAI_URL
     payload = {
@@ -569,12 +570,12 @@ def detect_tool_call(content: str) -> str:
     return None
 
 async def fetch_cluster_data(endpoint: str,cluster_name:str) -> str:
-    url = f"http://127.0.0.1:8000/get-direct-es-stats?queryField=clusterName&host={cluster_name}&call={endpoint}"
+    url = f"http://127.0.0.1:8000/get-red-api?queryField=clusterName&host={cluster_name}&call={endpoint}"
     print(url)
     try:
         result = subprocess.run([
         "curl", "-XGET", f"https://qa6-red-api.sprinklr.com/internal-cross/api/v1/getDirectESStats?queryField=host&host={cluster_name}&clusterName=&call={endpoint}"
-            ]+headers, capture_output=True, text=True, check=True).stdout
+            ]+headers_curl, capture_output=True, text=True, check=True).stdout
         try:
             res=json.loads(result)
             return res
@@ -586,24 +587,24 @@ async def fetch_cluster_data(endpoint: str,cluster_name:str) -> str:
         return False
 
 
-shared_context2 = ChatContext()
+shared_context_tool = ChatContext()
 @router.post("/chat/tool-query")
-async def send_chat_message(msg: ChatMessagee):
-    shared_context2.set_initial_tool_call_context()
-    shared_context2.add_user_message(msg.message)
+async def send_chat_message(msg: ChatMessageTool):
+    shared_context_tool.set_initial_tool_call_context()
+    shared_context_tool.add_user_message(msg.message)
     url = "https://qa6-api2.sprinklr.com/api/gen-ai-router/generateWithRequest"
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            shared_context2.add_system_message("Was above user message a Question?")
-            payload = gen_chatbot_Payload(shared_context2.get_trimmed_history(model="gpt-4o-mini"))
+            shared_context_tool.add_system_message("Was above user message a Question?")
+            payload = gen_chatbot_Payload(shared_context_tool.get_trimmed_history(model="gpt-4o-mini"))
             response = await client.post(url, headers=headers_llm, json=payload)
             response.raise_for_status()
             assistant_reply=response.json().get("response", "").get("choices", "")[0].get("message", "").get("content", "No content found")
             print(1)
             if(assistant_reply=='no'):
-                shared_context2.add_assistant_message("no")
-                shared_context2.add_system_message("Use this data to answer above user's question.")
-                payload = gen_chatbot_Payload(shared_context2.get_trimmed_history(model="gpt-4o-mini"))
+                shared_context_tool.add_assistant_message("no")
+                shared_context_tool.add_system_message("Use this data to answer above user's question.")
+                payload = gen_chatbot_Payload(shared_context_tool.get_trimmed_history(model="gpt-4o-mini"))
                 print(11)
                 response = await client.post(url, headers=headers_llm, json=payload)
                 response.raise_for_status()
@@ -611,13 +612,13 @@ async def send_chat_message(msg: ChatMessagee):
                 return {"reply":assistant_reply}
             else:
                 print(22)
-                shared_context2.add_assistant_message("yes")
-                shared_context2.add_system_message("Send the Elasticsearch API endpoint for user's question without 'GET' or 'POST' in it.")
-                payload = gen_chatbot_Payload(shared_context2.get_trimmed_history(model="gpt-4o-mini"))
+                shared_context_tool.add_assistant_message("yes")
+                shared_context_tool.add_system_message("Send the Elasticsearch API endpoint for user's question without 'GET' or 'POST' in it.")
+                payload = gen_chatbot_Payload(shared_context_tool.get_trimmed_history(model="gpt-4o-mini"))
                 response = await client.post(url, headers=headers_llm, json=payload)
                 response.raise_for_status()
                 assistant_reply=response.json().get("response", "").get("choices", "")[0].get("message", "").get("content", "No content found")
-                shared_context2.add_assistant_message(assistant_reply)
+                shared_context_tool.add_assistant_message(assistant_reply)
                 tool_response=1
                 try:
                     print(111)
@@ -627,15 +628,15 @@ async def send_chat_message(msg: ChatMessagee):
                     tool_response=False
                 if(not tool_response):
                     return {"reply":"Can't extact data, please provide your data"}
-                shared_context2.add_tool_response(assistant_reply,str(tool_response)[:5000])
-                shared_context2.add_user_message("Answer this user query using the above Elasticsearch Api response output : "+msg.message)
-                payload = gen_chatbot_Payload(shared_context2.get_trimmed_history(model="gpt-4o-mini"))
+                shared_context_tool.add_tool_response(assistant_reply,str(tool_response)[:5000])
+                shared_context_tool.add_user_message("Answer this user query using the above Elasticsearch Api response output : "+msg.message)
+                payload = gen_chatbot_Payload(shared_context_tool.get_trimmed_history(model="gpt-4o-mini"))
                 print(1111)
                 res = await client.post(url, headers=headers_llm, json=payload)
                 res.raise_for_status()
                 print(2211)
                 final_reply=res.json().get("response", "").get("choices", "")[0].get("message", "").get("content", "No content found")
-                shared_context.add_assistant_message(final_reply)
+                shared_context_tool.add_assistant_message(final_reply)
                 return {"reply": final_reply, "tool_call": True}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -126,14 +126,13 @@ interface SetterMap {
   [key: string]: React.Dispatch<React.SetStateAction<string>>
 }
 
-interface setExpr {
+interface ValueMap {
   [key: string]: string
 }
 
 export default function IndexMetricExplorer() {
 
   const router = useRouter()
-  const [data, setData] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [indexInput, setIndexInput] = useState("")
   const [showAddMetrics, setShowAddMetrics] = useState(false)
@@ -144,49 +143,49 @@ export default function IndexMetricExplorer() {
   const now = dayjs()
   const oneHourAgo = dayjs().subtract(1, "hour")
 
-  const [m1_strt_time, set_M1_Strt_Time] = useState<string>(oneHourAgo.valueOf().toString())
-  const [m2_strt_time, set_M2_Strt_Time] = useState<string>(oneHourAgo.valueOf().toString())
-  const [m3_strt_time, set_M3_Strt_Time] = useState<string>(oneHourAgo.valueOf().toString())
-  const [m4_strt_time, set_M4_Strt_Time] = useState<string>(oneHourAgo.valueOf().toString())
-  const [m5_strt_time, set_M5_Strt_Time] = useState<string>(oneHourAgo.valueOf().toString())
+  const [metric1_strt_time, set_Metric1_Strt_Time] = useState<string>(oneHourAgo.valueOf().toString())
+  const [metric2_strt_time, set_Metric2_Strt_Time] = useState<string>(oneHourAgo.valueOf().toString())
+  const [metric3_strt_time, set_Metric3_Strt_Time] = useState<string>(oneHourAgo.valueOf().toString())
+  const [metric4_strt_time, set_Metric4_Strt_Time] = useState<string>(oneHourAgo.valueOf().toString())
+  const [metric5_strt_time, set_Metric5_Strt_Time] = useState<string>(oneHourAgo.valueOf().toString())
 
-  const [m1_end_time, set_M1_End_Time] = useState<string>(now.valueOf().toString())
-  const [m2_end_time, set_M2_End_Time] = useState<string>(now.valueOf().toString())
-  const [m3_end_time, set_M3_End_Time] = useState<string>(now.valueOf().toString())
-  const [m4_end_time, set_M4_End_Time] = useState<string>(now.valueOf().toString())
-  const [m5_end_time, set_M5_End_Time] = useState<string>(now.valueOf().toString())
+  const [metric1_end_time, set_Metric1_End_Time] = useState<string>(now.valueOf().toString())
+  const [metric2_end_time, set_Metric2_End_Time] = useState<string>(now.valueOf().toString())
+  const [metric3_end_time, set_Metric3_End_Time] = useState<string>(now.valueOf().toString())
+  const [metric4_end_time, set_Metric4_End_Time] = useState<string>(now.valueOf().toString())
+  const [metric5_end_time, set_Metric5_End_Time] = useState<string>(now.valueOf().toString())
 
-  const map_tr_st: setExpr =
+  const mapStrtTime: ValueMap =
   {
-    "docs_count": m1_strt_time,
-    "index_total": m2_strt_time,
-    "search_total": m3_strt_time,
-    "refresh_total": m4_strt_time,
-    "store_size": m5_strt_time,
+    "docs_count": metric1_strt_time,
+    "index_total": metric2_strt_time,
+    "search_total": metric3_strt_time,
+    "refresh_total": metric4_strt_time,
+    "store_size": metric5_strt_time,
   }
-  const map_tr_ed: setExpr =
+  const mapEndTime: ValueMap =
   {
-    "docs_count": m1_end_time,
-    "index_total": m2_end_time,
-    "search_total": m3_end_time,
-    "refresh_total": m4_end_time,
-    "store_size": m5_end_time,
+    "docs_count": metric1_end_time,
+    "index_total": metric2_end_time,
+    "search_total": metric3_end_time,
+    "refresh_total": metric4_end_time,
+    "store_size": metric5_end_time,
   }
-  const map_tr1: SetterMap =
+  const mapStrtSet: SetterMap =
   {
-    "docs_count": set_M1_Strt_Time,
-    "index_total": set_M2_Strt_Time,
-    "search_total": set_M3_Strt_Time,
-    "refresh_total": set_M4_Strt_Time,
-    "store_size": set_M5_Strt_Time,
+    "docs_count": set_Metric1_Strt_Time,
+    "index_total": set_Metric2_Strt_Time,
+    "search_total": set_Metric3_Strt_Time,
+    "refresh_total": set_Metric4_Strt_Time,
+    "store_size": set_Metric5_Strt_Time,
   }
-  const map_tr2: SetterMap =
+  const mapEndSet: SetterMap =
   {
-    "docs_count": set_M1_End_Time,
-    "index_total": set_M2_End_Time,
-    "search_total": set_M3_End_Time,
-    "refresh_total": set_M4_End_Time,
-    "store_size": set_M5_End_Time,
+    "docs_count": set_Metric1_End_Time,
+    "index_total": set_Metric2_End_Time,
+    "search_total": set_Metric3_End_Time,
+    "refresh_total": set_Metric4_End_Time,
+    "store_size": set_Metric5_End_Time,
   }
 
 
@@ -200,13 +199,13 @@ export default function IndexMetricExplorer() {
       setTopNIndices(JSON.parse(storedIndices))
     }
 
-  }, [data])
+  }, [])
 
   useEffect(() => {
     addIndexWithMetrics()
   }, [
-    m1_strt_time, m2_strt_time, m3_strt_time, m4_strt_time, m5_strt_time,
-    m1_end_time, m2_end_time, m3_end_time, m4_end_time, m5_end_time
+    metric1_strt_time, metric2_strt_time, metric3_strt_time, metric4_strt_time, metric5_strt_time,
+    metric1_end_time, metric2_end_time, metric3_end_time, metric4_end_time, metric5_end_time
   ])
 
   const handleIndexSelect = (indexName: string) => {
@@ -220,7 +219,7 @@ export default function IndexMetricExplorer() {
   }
 
   const return_Expr = (metric_name: string) => {
-    const expr_array: setExpr =
+    const expr_array: ValueMap =
     {
       "docs_count": "avg(change_stream_num_documents_fetched{} )",
       "index_total": "sum(rate(jaeger_bulk_index_attempts_total{}[$__rate_interval]) )",
@@ -241,8 +240,8 @@ export default function IndexMetricExplorer() {
         currentMetrics.map(async (metricId) => {
           const response = await axios.post("http://127.0.0.1:8000/query/metric", {
             "expr": return_Expr(metricId),
-            "from_time": map_tr_st[metricId],
-            "to_time": map_tr_ed[metricId],
+            "from_time": mapStrtTime[metricId],
+            "to_time": mapEndTime[metricId],
             "metric_name": metricId
           })
           const originalData = response.data
@@ -448,8 +447,8 @@ export default function IndexMetricExplorer() {
       <div className="space-y-6">
         {selectedIndex?.metrics.map((metricData) => {
           return <MetricChart
-            setTime1={map_tr1[metricData.id]}
-            setTime2={map_tr2[metricData.id]}
+            setTime1={mapStrtSet[metricData.id]}
+            setTime2={mapEndSet[metricData.id]}
             key={metricData.id}
             indexName={selectedIndex.name}
             metricData={metricData}

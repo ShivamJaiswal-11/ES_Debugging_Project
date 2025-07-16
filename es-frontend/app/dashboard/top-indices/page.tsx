@@ -64,49 +64,43 @@ export default function TopIndices() {
   const [searchTerm, setSearchTerm] = useState("")
   const [fdisabled, setFdisabled] = useState(false)
   const [indices, setIndices] = useState<IndexInfo[]>([])
-  const [indicesList, setIndicesList] = useState<string[]>([])
-  const [topNIndicesList, setTopNIndicesList] = useState<string[]>([])
   const [filteredIndices, setFilteredIndices] = useState<IndexInfo[]>([])
 
   const fetchIndices = async () => {
     const clusterName = localStorage.getItem("SelectedClusterName")
     setLoading(true)
     axios
-      .get<IndexInfo_[]>(`http://127.0.0.1:8000/get-top-indices?cluster_name=${clusterName}&top_n=${n_val}&sort_by=${sortBy}`)
-      .then((res) => {
-        const indexNames = res.data
-        const indexInfoResponses = (indexNames.map((index) => {
-          const info: IndexInfo = {
-            name: index.index,
-            docCount: index.docs_count,
-            size: `${index.store_size} bytes`,
-            health: index.health,
-            indexingCount: index.indexing_index_total,
-            searchCount: index.search_query_total,
-            refreshCount: index.refresh_refresh_total
-          }
-          // console.log(info)
-          return info
-        }))
-        const validInfo = indexInfoResponses.filter(
-          (info): info is IndexInfo => info !== null
-        )
-        setIndices(validInfo)
-        localStorage.setItem("top_n_filtered_indices_list", JSON.stringify(validInfo));
-        toast.success("Indices fetched successfully!")
-        // console.log("Fetched Indices:", validInfo)
-      })
-      .catch((err) => {
-        // console.error("Error fetching indices list:", err)
-        toast.error("Error fetching indices list. Please try again later.")
-      })
-      .finally(() => {
-        setTimeout(() => {
-          setLoading(false)
-        }, 100)
-      }
+    .get<IndexInfo_[]>(`http://127.0.0.1:8000/get-top-indices?cluster_name=${clusterName}&top_n=${n_val}&sort_by=${sortBy}`)
+    .then((res) => {
+      const indexNames = res.data
+      const indexInfoResponses = (indexNames.map((index) => {
+        const info: IndexInfo = {
+          name: index.index,
+          docCount: index.docs_count,
+          size: `${index.store_size} bytes`,
+          health: index.health,
+          indexingCount: index.indexing_index_total,
+          searchCount: index.search_query_total,
+          refreshCount: index.refresh_refresh_total
+        }
+        return info
+      }))
+      const validInfo = indexInfoResponses.filter(
+        (info): info is IndexInfo => info !== null
       )
-    // }
+      setIndices(validInfo)
+      localStorage.setItem("top_n_filtered_indices_list", JSON.stringify(validInfo));
+      toast.success("Indices fetched successfully!")
+    })
+    .catch((err) => {
+      toast.error("Error fetching indices list. Please try again later.",err)
+    })
+    .finally(() => {
+      setTimeout(() => {
+        setLoading(false)
+      }, 100)
+    }
+    )
   }
 
   useEffect(() => {
@@ -128,7 +122,6 @@ export default function TopIndices() {
         const parsedIndices = JSON.parse(filtered_indices_lst) as IndexInfo[]
         if (parsedIndices.length > 0) {
           setIndices(parsedIndices)
-          // console.log("Using stored indices:", parsedIndices)
         }
       } else {
         fetchIndices()
@@ -191,7 +184,6 @@ export default function TopIndices() {
             searchCount: index.search_query_total,
             refreshCount: index.refresh_refresh_total
           }
-          // console.log(info)
           return info
         }
         )
@@ -202,11 +194,9 @@ export default function TopIndices() {
         setIndices(validInfo)
         localStorage.setItem("top_n_filtered_indices_list", JSON.stringify(validInfo));
         toast.success("Indices fetched successfully!")
-        // console.log("Fetched Indices:", validInfo)
       })
       .catch((err) => {
-        // console.error("Error fetching indices list:", err)
-        toast.error("Error fetching indices list. Please try again later.")
+        toast.error("Error fetching indices list. Please try again later.",err)
       })
       .finally(() => {
         setTimeout(() => {
@@ -214,7 +204,6 @@ export default function TopIndices() {
         }, 100)
       }
       )
-    // }
   }
 
   return (
@@ -238,11 +227,9 @@ export default function TopIndices() {
           <CardContent>
             <div className="relative flex flex-row">
               <div className="relative flex flex-row w-5/6 p-2 h-full">
-                {/* <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" /> */}
                 <Input
                   type="number"
                   placeholder="Enter value of N"
-                  // value={searchTerm}
                   value={n_val}
                   onChange={(e) => setN_val((e.target.value))}
                   className="mr-8 w-3/5 h-full justify-center flex text-black dark:text-white dark:placeholder:text-gray-300 placeholder:text-zinc-800"

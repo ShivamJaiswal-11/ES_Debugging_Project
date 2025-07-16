@@ -30,12 +30,10 @@ export default function ClusterOverview() {
   const fetchClusterHealth = async () => {
     setLoading(true)
     const selectedCluster = localStorage.getItem("SelectedClusterName")
-    // console.log("Selected Cluster:", selectedCluster)
     axios
-      .get("http://127.0.0.1:8000/cluster/health?cluster_name=" + selectedCluster)
+      .get("http://127.0.0.1:8000/get-cluster-health?cluster_name=" + selectedCluster)
       .then((response) => {
         const data = response.data
-        // console.log(data)
         const health: ClusterHealth = {
           status: data.status,
           cluster_name: data.cluster_name,
@@ -50,7 +48,6 @@ export default function ClusterOverview() {
         setClusterHealth(health)
       })
       .catch((error) => {
-        // console.error("Error fetching cluster health:", error)
         toast.error("Failed to fetch cluster health.", error)
       })
       .finally(() => {

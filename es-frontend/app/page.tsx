@@ -26,7 +26,7 @@ export default function HomePage() {
   const [selectedCluster, setSelectedCluster] = useState<string>("")
 
   useEffect(() => {
-    axios.get("http://127.0.0.1:8000/cluster-list")
+    axios.get("http://127.0.0.1:8000/get-cluster-list")
       .then((response) => {
         setClusterList(response.data)
       })

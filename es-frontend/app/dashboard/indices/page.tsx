@@ -49,7 +49,6 @@ export default function IndicesExplorer() {
         localStorage.setItem("Indices_list", JSON.stringify(indexInfoResponses));
       })
       .catch((err) => {
-        // console.error("Error fetching indices list:", err)
         toast.error("Failed to fetch indices list.", err)
         setIndices([])
         localStorage.setItem("Indices_list", JSON.stringify([]));

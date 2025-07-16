@@ -28,28 +28,28 @@ export default function JStackDiagnostics() {
     const clusterName = localStorage.getItem("SelectedClusterName")
     setLoading(true)
     axios
-      .get("http://127.0.0.1:8000/nodes?cluster_name=" + clusterName)
-      .then(async (res) => {
-        const nodeNames = res.data
-        const NodeInfoResponses = nodeNames.map((nodes: any) => {
-          const info: NodeInfo = {
-            name: nodes.name,
-            node_id: nodes.node_id,
-            pid: nodes.pid,
-          }
-          return info
-        })
-        setNodes(NodeInfoResponses)
-        localStorage.setItem("filtered_Nodes_list", JSON.stringify(NodeInfoResponses))
+    .get("http://127.0.0.1:8000/get-nodes?cluster_name=" + clusterName)
+    .then(async (res) => {
+      const nodeNames = res.data
+      const NodeInfoResponses = nodeNames.map((nodes: any) => {
+        const info: NodeInfo = {
+          name: nodes.name,
+          node_id: nodes.node_id,
+          pid: nodes.pid,
+        }
+        return info
       })
-      .catch((err) => {
-        toast.error("Failed to fetch nodes.", err)
-      })
-      .finally(() => {
-        setTimeout(() => {
-          setLoading(false)
-        }, 100)
-      })
+      setNodes(NodeInfoResponses)
+      localStorage.setItem("filtered_Nodes_list", JSON.stringify(NodeInfoResponses))
+    })
+    .catch((err) => {
+      toast.error("Failed to fetch nodes.", err)
+    })
+    .finally(() => {
+      setTimeout(() => {
+        setLoading(false)
+      }, 100)
+    })
   }
 
   useEffect(() => {
@@ -70,7 +70,7 @@ export default function JStackDiagnostics() {
     }
   }, [router])
 
-  const onClickRunHotThread = async (Node_Name: string) => {
+  const onClickAnalyseHotThread = async (Node_Name: string) => {
     setAnalysis("")
     const clusterName = localStorage.getItem("SelectedClusterName")
     toast.loading("Analyzing hot threads Output...")
@@ -126,13 +126,13 @@ export default function JStackDiagnostics() {
     }
   }
 
-  const handleDiagnose = (Node_Name: string) => {
+  const onClickAnalyseJvm = (Node_Name: string) => {
     const clusterName = localStorage.getItem("SelectedClusterName")
     setAnalysis("")
     setLoading(true)
     toast.loading("Analyzing JStack Output...")
     axios
-      .get("http://127.0.0.1:8000/analyze-by-node?cluster_name=" + clusterName + "&node_name=" + Node_Name)
+      .get("http://127.0.0.1:8000/analyze-by-jvm?cluster_name=" + clusterName + "&node_name=" + Node_Name)
       .then((res) => {
         setAnalysis(res.data.analysis)
         toast.dismiss()
@@ -147,7 +147,7 @@ export default function JStackDiagnostics() {
       }
       )
   }
-  const handleAnalyze = (Node_Name: string) => {
+  const onClickAnalyseTasks = (Node_Name: string) => {
     const clusterName = localStorage.getItem("SelectedClusterName")
     setAnalysis("")
     setLoading(true)
@@ -210,19 +210,19 @@ export default function JStackDiagnostics() {
                   <TableCell>{Node.node_id}</TableCell>
                   <TableCell>{Node.pid?.toLocaleString()}</TableCell>
                   <TableCell>
-                    <Button size="sm" variant="outline" onClick={() => handleDiagnose(Node.name)} disabled={loading} className="hover:cursor-pointer">
+                    <Button size="sm" variant="outline" onClick={() => onClickAnalyseJvm(Node.name)} disabled={loading} className="hover:cursor-pointer">
                       <Play className="mr-2 h-3 w-3" />
                       Diagnose
                     </Button>
                   </TableCell>
                   <TableCell>
-                    <Button size="sm" variant="outline" onClick={() => onClickRunHotThread(Node.name)} disabled={loading} className="hover:cursor-pointer">
+                    <Button size="sm" variant="outline" onClick={() => onClickAnalyseHotThread(Node.name)} disabled={loading} className="hover:cursor-pointer">
                       <Play className="mr-2 h-3 w-3" />
                       Diagnose
                     </Button>
                   </TableCell>
                   <TableCell>
-                    <Button size="sm" variant="outline" onClick={() => handleAnalyze(Node.name)} disabled={loading} className="hover:cursor-pointer">
+                    <Button size="sm" variant="outline" onClick={() => onClickAnalyseTasks(Node.name)} disabled={loading} className="hover:cursor-pointer">
                       <Play className="mr-2 h-3 w-3" />
                       Diagnose
                     </Button>

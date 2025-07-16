@@ -11,7 +11,7 @@ class ChatMessage(BaseModel):
     message: str
     metric:str
 
-class ChatMessagee(BaseModel):
+class ChatMessageTool(BaseModel):
     message: str
     cluster_name:str
 
