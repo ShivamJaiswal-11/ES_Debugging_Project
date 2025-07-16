@@ -4,7 +4,8 @@ import axios from "axios"
 import toast from "react-hot-toast"
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { Search, RefreshCw } from "lucide-react"
+import { Search, RefreshCw, Folder, Hash, HardDrive, Activity } from "lucide-react"
+
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -15,50 +16,50 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 interface IndexInfo {
   name: string
   docCount: number
-  indexingCount : number
-  searchCount : number
+  indexingCount: number
+  searchCount: number
   refreshCount: number
   size: string
   health: "green" | "yellow" | "red"
 }
 
 interface IndexInfo_ {
-  index : string
-  docs_count : number
-  store_size : number
-  indexing_index_total : number
-  search_query_total : number
-  refresh_refresh_total : number
-  health : "green" | "yellow" | "red"
+  index: string
+  docs_count: number
+  store_size: number
+  indexing_index_total: number
+  search_query_total: number
+  refresh_refresh_total: number
+  health: "green" | "yellow" | "red"
 
 }
 
 const optionLists = [
-   {
-    value:"docs_count",
-    label:"Docs Count"
+  {
+    value: "docs_count",
+    label: "Docs Count"
   },
   {
-    value:"store_size",
-    label:"Size stored"
+    value: "store_size",
+    label: "Stored Size"
   },
   {
-    value:"indexing_index_total",
-    label:"Total indexing"
+    value: "indexing_index_total",
+    label: "Indexing Count"
   },
   {
-    value:"refresh_refresh_total",
-    label:"Total refresh"
+    value: "refresh_refresh_total",
+    label: "Refresh Count"
   },
   {
-    value:"search_query_total",
-    label:"Total search query"
+    value: "search_query_total",
+    label: "Search Count"
   },
 ]
 export default function TopIndices() {
   const router = useRouter()
-  const [n_val,setN_val]=useState("0")    
-  const [sortBy,setSortBy]=useState("")
+  const [n_val, setN_val] = useState("0")
+  const [sortBy, setSortBy] = useState("")
   const [loading, setLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [fdisabled, setFdisabled] = useState(false)
@@ -69,45 +70,41 @@ export default function TopIndices() {
 
   const fetchIndices = async () => {
     const clusterName = localStorage.getItem("SelectedClusterName")
-      setLoading(true)
-      axios
-      .get<IndexInfo_[]>(`http://127.0.0.1:8000/get-top-indices?cluster_name=${clusterName}&top_n=${n_val}`)
-      .then( (res) => {
+    setLoading(true)
+    axios
+      .get<IndexInfo_[]>(`http://127.0.0.1:8000/get-top-indices?cluster_name=${clusterName}&top_n=${n_val}&sort_by=${sortBy}`)
+      .then((res) => {
         const indexNames = res.data
-          const indexInfoResponses= (indexNames.map((index) =>
-          {
-            const info: IndexInfo = {
-              name: index.index,
-              docCount: index.docs_count,
-              size: `${index.store_size} bytes`,
-              health: index.health,
-              indexingCount: index.indexing_index_total ,
-              searchCount: index.search_query_total ,
-              refreshCount: index. refresh_refresh_total
-            }
-            // console.log(info)
-            return info
+        const indexInfoResponses = (indexNames.map((index) => {
+          const info: IndexInfo = {
+            name: index.index,
+            docCount: index.docs_count,
+            size: `${index.store_size} bytes`,
+            health: index.health,
+            indexingCount: index.indexing_index_total,
+            searchCount: index.search_query_total,
+            refreshCount: index.refresh_refresh_total
           }
-          )
-        )
+          // console.log(info)
+          return info
+        }))
         const validInfo = indexInfoResponses.filter(
           (info): info is IndexInfo => info !== null
         )
         setIndices(validInfo)
-        localStorage.setItem("filtered_indices_list", JSON.stringify(validInfo));
+        localStorage.setItem("top_n_filtered_indices_list", JSON.stringify(validInfo));
         toast.success("Indices fetched successfully!")
         // console.log("Fetched Indices:", validInfo)
       })
-      .catch((err) => 
-        {
-          // console.error("Error fetching indices list:", err)
-          toast.error("Error fetching indices list. Please try again later.")
-        })
-      .finally (() => {
-          setTimeout(() => {
-            setLoading(false)
-          }, 100)
-        }
+      .catch((err) => {
+        // console.error("Error fetching indices list:", err)
+        toast.error("Error fetching indices list. Please try again later.")
+      })
+      .finally(() => {
+        setTimeout(() => {
+          setLoading(false)
+        }, 100)
+      }
       )
     // }
   }
@@ -117,7 +114,7 @@ export default function TopIndices() {
     if (clusterInit !== "true") {
       router.push("/")
     }
-    else{
+    else {
       const stored_n_val = localStorage.getItem("N_val")
       const stored_sortBy = localStorage.getItem("SortBy")
       if (stored_n_val) {
@@ -126,7 +123,7 @@ export default function TopIndices() {
       if (stored_sortBy) {
         setSortBy(stored_sortBy)
       }
-      const filtered_indices_lst = localStorage.getItem("filtered_indices_list")
+      const filtered_indices_lst = localStorage.getItem("top_n_filtered_indices_list")
       if (filtered_indices_lst) {
         const parsedIndices = JSON.parse(filtered_indices_lst) as IndexInfo[]
         if (parsedIndices.length > 0) {
@@ -158,7 +155,7 @@ export default function TopIndices() {
   }
   const onclickFilter = () => {
     setFdisabled(true)
-    let n_val_num=1;
+    let n_val_num = 1;
     try {
       n_val_num = Number(n_val)
       if (isNaN(n_val_num) || n_val_num <= 0) {
@@ -180,44 +177,42 @@ export default function TopIndices() {
     localStorage.setItem("N_val", n_val_num.toString())
     localStorage.setItem("SortBy", sortBy)
     const clusterName = localStorage.getItem("SelectedClusterName")
-      axios
+    axios
       .get<IndexInfo_[]>(`http://127.0.0.1:8000/get-top-indices?cluster_name=${clusterName}&top_n=${n_val}&sort_by=${sortBy}`)
-      .then( (res) => {
+      .then((res) => {
         const indexNames = res.data
-          const indexInfoResponses= (indexNames.map((index) =>
-          {
-            const info: IndexInfo = {
-              name: index.index,
-              docCount: index.docs_count,
-              size: `${index.store_size} bytes`,
-              health: index.health,
-              indexingCount: index.indexing_index_total ,
-              searchCount: index.search_query_total ,
-              refreshCount: index. refresh_refresh_total
-            }
-            // console.log(info)
-            return info
+        const indexInfoResponses = (indexNames.map((index) => {
+          const info: IndexInfo = {
+            name: index.index,
+            docCount: index.docs_count,
+            size: `${index.store_size} bytes`,
+            health: index.health,
+            indexingCount: index.indexing_index_total,
+            searchCount: index.search_query_total,
+            refreshCount: index.refresh_refresh_total
           }
-          )
+          // console.log(info)
+          return info
+        }
+        )
         )
         const validInfo = indexInfoResponses.filter(
           (info): info is IndexInfo => info !== null
         )
         setIndices(validInfo)
-        localStorage.setItem("filtered_indices_list", JSON.stringify(validInfo));
+        localStorage.setItem("top_n_filtered_indices_list", JSON.stringify(validInfo));
         toast.success("Indices fetched successfully!")
         // console.log("Fetched Indices:", validInfo)
       })
-      .catch((err) => 
-        {
-          // console.error("Error fetching indices list:", err)
-          toast.error("Error fetching indices list. Please try again later.")
-        })
-      .finally (() => {
-          setTimeout(() => {
-            setFdisabled(false)
-          }, 100)
-        }
+      .catch((err) => {
+        // console.error("Error fetching indices list:", err)
+        toast.error("Error fetching indices list. Please try again later.")
+      })
+      .finally(() => {
+        setTimeout(() => {
+          setFdisabled(false)
+        }, 100)
+      }
       )
     // }
   }
@@ -237,7 +232,7 @@ export default function TopIndices() {
       <div className="flex flex-row w-full">
         <Card className="w-1/2 m-2">
           <CardHeader>
-            <CardTitle>Filter Top N Indices</CardTitle>
+            <CardTitle>Top N Index Filter</CardTitle>
             <CardDescription>Filter and Sort indices by different metrics to find most active indices</CardDescription>
           </CardHeader>
           <CardContent>
@@ -298,13 +293,13 @@ export default function TopIndices() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Index Name</TableHead>
-                <TableHead>Document Count</TableHead>
-                <TableHead>Indexing Count</TableHead>
-                <TableHead>Search Count</TableHead>
-                <TableHead>Refresh Count</TableHead>
-                <TableHead>Size</TableHead>
-                <TableHead>Health</TableHead>
+                <TableHead><div className="flex flex-row space-x-2 items-center justify-start"><Folder /> <div>Index Name </div></div></TableHead>
+                <TableHead><div className="flex flex-row space-x-2 items-center justify-start"><Hash /> <div>Docs Count </div></div></TableHead>
+                <TableHead><div className="flex flex-row space-x-2 items-center justify-start"><Hash /> <div>Indexing Count </div></div></TableHead>
+                <TableHead><div className="flex flex-row space-x-2 items-center justify-start"><Hash /> <div>Search Count </div></div></TableHead>
+                <TableHead><div className="flex flex-row space-x-2 items-center justify-start"><Hash /> <div>Refresh Count </div></div></TableHead>
+                <TableHead><div className="flex flex-row space-x-2 items-center justify-start"><HardDrive /> <div>Stored Size </div></div></TableHead>
+                <TableHead><div className="flex flex-row space-x-2 items-center justify-start"><Activity /> <div>Health </div></div></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

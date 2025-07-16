@@ -1,9 +1,11 @@
 "use client"
+
 import axios from "axios"
 import { toast } from "react-hot-toast"
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { RefreshCw, Server, Database, Activity, AlertTriangle } from "lucide-react"
+
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -24,38 +26,38 @@ export default function ClusterOverview() {
   const [loading, setLoading] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [clusterHealth, setClusterHealth] = useState<ClusterHealth | null>(null)
-  
+
   const fetchClusterHealth = async () => {
     setLoading(true)
     const selectedCluster = localStorage.getItem("SelectedClusterName")
     // console.log("Selected Cluster:", selectedCluster)
-      axios
-        .get("http://127.0.0.1:8000/cluster/health?cluster_name=" + selectedCluster)
-        .then((response) => {
-          const data = response.data
-          // console.log(data)
-          const health: ClusterHealth = {
-            status: data.status,
-            cluster_name: data.cluster_name,
-            number_of_nodes: data.number_of_nodes,
-            number_of_data_nodes: data.number_of_data_nodes,
-            active_primary_shards: data.active_primary_shards,
-            active_shards: data.active_shards,
-            unassigned_shards: data.unassigned_shards,
-            pending_tasks: data.number_of_pending_tasks,
-          }
-          setLastUpdated(new Date())
-          setClusterHealth(health)
-        })
-        .catch((error) => {
-          // console.error("Error fetching cluster health:", error)
-          toast.error("Failed to fetch cluster health.")
-        })
-        .finally(() => {
-          setTimeout(() => {
-            setLoading(false)
-          }, 100) 
-        })
+    axios
+      .get("http://127.0.0.1:8000/cluster/health?cluster_name=" + selectedCluster)
+      .then((response) => {
+        const data = response.data
+        // console.log(data)
+        const health: ClusterHealth = {
+          status: data.status,
+          cluster_name: data.cluster_name,
+          number_of_nodes: data.number_of_nodes,
+          number_of_data_nodes: data.number_of_data_nodes,
+          active_primary_shards: data.active_primary_shards,
+          active_shards: data.active_shards,
+          unassigned_shards: data.unassigned_shards,
+          pending_tasks: data.number_of_pending_tasks,
+        }
+        setLastUpdated(new Date())
+        setClusterHealth(health)
+      })
+      .catch((error) => {
+        // console.error("Error fetching cluster health:", error)
+        toast.error("Failed to fetch cluster health.", error)
+      })
+      .finally(() => {
+        setTimeout(() => {
+          setLoading(false)
+        }, 100)
+      })
   }
 
   useEffect(() => {

@@ -1,9 +1,11 @@
 "use client"
+
 import axios from "axios"
 import { toast } from "react-hot-toast"
 import { useRouter } from "next/navigation"
 import { useState, useEffect } from "react"
-import { Search, RefreshCw } from "lucide-react"
+import { Search, RefreshCw, Folder, Hash, Activity, HardDrive } from "lucide-react"
+
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -28,31 +30,30 @@ export default function IndicesExplorer() {
   const fetchIndices = async () => {
     setLoading(true)
     const selectedCluster = localStorage.getItem("SelectedClusterName")
-      axios
+    axios
       .get(`http://127.0.0.1:8000/get-top-indices?cluster_name=${selectedCluster}&top_n=0`)
       .then((res) => {
         const indexNames = res.data
-          const indexInfoResponses= indexNames.map((indexx:any) =>{
-                const info: IndexInfo =
-                 {
-                    name: indexx.index,
-                    health: indexx.health,
-                    size: indexx.store_size,
-                    docCount: indexx.docs_count,
-                }
-                return info
-              }
-          )
+        const indexInfoResponses = indexNames.map((indexx: any) => {
+          const info: IndexInfo =
+          {
+            name: indexx.index,
+            health: indexx.health,
+            size: indexx.store_size,
+            docCount: indexx.docs_count,
+          }
+          return info
+        }
+        )
         setIndices(indexInfoResponses)
         localStorage.setItem("Indices_list", JSON.stringify(indexInfoResponses));
       })
-      .catch((err) =>
-        {
-          // console.error("Error fetching indices list:", err)
-          toast.error("Failed to fetch indices list.")
-          setIndices([])
-          localStorage.setItem("Indices_list", JSON.stringify([]));
-        })
+      .catch((err) => {
+        // console.error("Error fetching indices list:", err)
+        toast.error("Failed to fetch indices list.", err)
+        setIndices([])
+        localStorage.setItem("Indices_list", JSON.stringify([]));
+      })
       .finally(() => {
         setTimeout(() => {
           setLoading(false)
@@ -64,7 +65,7 @@ export default function IndicesExplorer() {
     const clusterInit = localStorage.getItem("ClusterInit")
     if (clusterInit !== "true") {
       router.push("/")
-    }else{
+    } else {
       const indices_lst = localStorage.getItem("Indices_list")
       if (indices_lst) {
         const parsedIndices = JSON.parse(indices_lst) as IndexInfo[]
@@ -116,7 +117,7 @@ export default function IndicesExplorer() {
           <div className="relative">
             <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search indices..."
+              placeholder="Search by index name..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10"
@@ -134,10 +135,10 @@ export default function IndicesExplorer() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Index Name</TableHead>
-                <TableHead>Document Count</TableHead>
-                <TableHead>Size</TableHead>
-                <TableHead>Health</TableHead>
+                <TableHead><div className="flex flex-row space-x-2 items-center justify-start"><Folder /> <div>Index Name </div></div></TableHead>
+                <TableHead><div className="flex flex-row space-x-2 items-center justify-start"><Hash /> <div>Docs Count </div></div></TableHead>
+                <TableHead><div className="flex flex-row space-x-2 items-center justify-start"><HardDrive /> <div>Stored Size </div></div></TableHead>
+                <TableHead><div className="flex flex-row space-x-2 items-center justify-start"><Activity /> <div>Health </div></div></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

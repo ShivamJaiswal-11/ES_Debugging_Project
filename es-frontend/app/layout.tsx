@@ -2,8 +2,9 @@ import type React from "react"
 import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
-import { ThemeProvider } from "@/components/theme-provider"
+import { ThemeProvider as NextThemesProvider } from "next-themes"
 import { Toaster } from "react-hot-toast"
+import ThemeRegistry from "@/components/theme-registry"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -20,10 +21,36 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-          {children}
-        <Toaster position="top-right" reverseOrder={false} />
-        </ThemeProvider>
+        <NextThemesProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <ThemeRegistry>
+            {children}
+            <Toaster
+              position="top-right"
+              reverseOrder={false}
+              toastOptions={{
+                style: {
+                  background: '#1f2937', 
+                  color: '#fff',         
+                },
+                success: {
+                  style: {
+                    background: '#16a34a', 
+                  },
+                },
+                error: {
+                  style: {
+                    background: '#dc2626', 
+                  },
+                },
+              }}
+            />
+          </ThemeRegistry>
+        </NextThemesProvider>
       </body>
     </html>
   )
