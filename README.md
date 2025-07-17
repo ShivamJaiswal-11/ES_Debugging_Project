@@ -33,7 +33,7 @@ pip install -r requirements.txt
 
 - Run FastAPI Server:
 ```bash
-uvicorn main.app:app --reload
+uvicorn app.main:app --reload
 ```
 
 # Frontend Setup (Next.js)
