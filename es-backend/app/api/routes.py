@@ -502,7 +502,7 @@ class ChatContext:
 
     def get_trimmed_history(self, model: str = "gpt-4o-mini") -> List[Dict[str, str]]:
         while count_tokens(self.history, model=model) > self.max_tokens:
-            print("popping")
+            # print("popping")
             self.history.pop(1)
         return self.history
     
@@ -572,7 +572,7 @@ def detect_tool_call(content: str) -> str:
 
 async def fetch_cluster_data(endpoint: str,cluster_name:str) -> str:
     url = f"http://127.0.0.1:8000/get-red-api?queryField=clusterName&host={cluster_name}&call={endpoint}"
-    print(url)
+    # print(url)
     try:
         result = subprocess.run([
         "curl", "-XGET", f"https://qa6-red-api.sprinklr.com/internal-cross/api/v1/getDirectESStats?queryField=host&host={cluster_name}&clusterName=&call={endpoint}"
@@ -581,7 +581,7 @@ async def fetch_cluster_data(endpoint: str,cluster_name:str) -> str:
             res=json.loads(result)
             return res
         except:
-            # print(88)
+            print(88)
             return result
 
     except Exception as e:
@@ -601,18 +601,18 @@ async def send_chat_message(msg: ChatMessageTool):
             response = await client.post(url, headers=headers_llm, json=payload)
             response.raise_for_status()
             assistant_reply=response.json().get("response", "").get("choices", "")[0].get("message", "").get("content", "No content found")
-            print(1)
+            # print(1)
             if(assistant_reply=='no'):
                 shared_context_tool.add_assistant_message("no")
                 shared_context_tool.add_system_message("Use this data to answer above user's question.")
                 payload = gen_chatbot_Payload(shared_context_tool.get_trimmed_history(model="gpt-4o-mini"))
-                print(11)
+                # print(11)
                 response = await client.post(url, headers=headers_llm, json=payload)
                 response.raise_for_status()
                 assistant_reply=response.json().get("response", "").get("choices", "")[0].get("message", "").get("content", "No content found")                
                 return {"reply":assistant_reply}
             else:
-                print(22)
+                # print(22)
                 shared_context_tool.add_assistant_message("yes")
                 shared_context_tool.add_system_message("Send the Elasticsearch API endpoint for user's question without 'GET' or 'POST' in it.")
                 payload = gen_chatbot_Payload(shared_context_tool.get_trimmed_history(model="gpt-4o-mini"))
@@ -622,20 +622,20 @@ async def send_chat_message(msg: ChatMessageTool):
                 shared_context_tool.add_assistant_message(assistant_reply)
                 tool_response=1
                 try:
-                    print(111)
+                    # print(111)
                     tool_response = await fetch_cluster_data(assistant_reply,cluster_name=msg.cluster_name)
                 except:
-                    print(222)
+                    # print(222)
                     tool_response=False
                 if(not tool_response):
                     return {"reply":"Can't extact data, please provide your data"}
                 shared_context_tool.add_tool_response(assistant_reply,str(tool_response)[:5000])
                 shared_context_tool.add_user_message("Answer this user query using the above Elasticsearch Api response output : "+msg.message)
                 payload = gen_chatbot_Payload(shared_context_tool.get_trimmed_history(model="gpt-4o-mini"))
-                print(1111)
+                # print(1111)
                 res = await client.post(url, headers=headers_llm, json=payload)
                 res.raise_for_status()
-                print(2211)
+                # print(2211)
                 final_reply=res.json().get("response", "").get("choices", "")[0].get("message", "").get("content", "No content found")
                 shared_context_tool.add_assistant_message(final_reply)
                 return {"reply": final_reply, "tool_call": True}
