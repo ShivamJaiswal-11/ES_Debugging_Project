@@ -13,7 +13,7 @@ This document provides detailed steps to build, set up, and run the Elasticsearc
 ```
 - Create and Activate Virtual Environment:
 ```bash
-python -m venv venv
+python3 -m venv venv
 ```
 
 -  Activate (Linux/macOS)
@@ -28,7 +28,7 @@ venv\Scripts\activate
 
 - Install Dependencies:
 ```bash
-pip install -r requirements.txt
+pip3 install -r requirements.txt
 ```
 
 - Run FastAPI Server:
